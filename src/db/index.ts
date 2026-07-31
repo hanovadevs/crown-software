@@ -12,11 +12,14 @@ function createPool() {
     throw new Error("DATABASE_URL is not configured");
   }
 
+  const isRemote = !connectionString.includes("localhost") && !connectionString.includes("127.0.0.1");
+
   return new Pool({
     connectionString,
-    max: process.env.NODE_ENV === "production" ? 20 : 5,
+    max: process.env.NODE_ENV === "production" ? 10 : 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    ssl: isRemote ? { rejectUnauthorized: false } : undefined,
   });
 }
 
