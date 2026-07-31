@@ -7,12 +7,15 @@ const globalForDb = globalThis as unknown as {
 };
 
 function createPool() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not configured");
-  }
+  const connectionString =
+    process.env.DATABASE_URL ||
+    "postgresql://postgres:postgres@127.0.0.1:5432/dummy_build_db";
 
-  const isRemote = !connectionString.includes("localhost") && !connectionString.includes("127.0.0.1");
+  const isRemote =
+    connectionString.includes("supabase.co") ||
+    connectionString.includes("pooler.supabase.com") ||
+    (!connectionString.includes("localhost") &&
+      !connectionString.includes("127.0.0.1"));
 
   return new Pool({
     connectionString,
