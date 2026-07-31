@@ -55,7 +55,7 @@ export function AppShell({
           <Brand />
         </Link>
 
-        <nav className={`topnav ${menuOpen ? "open" : ""}`} aria-label="Main">
+        <nav className={`topnav ${menuOpen ? "open" : ""}`} aria-label="Main navigation">
           {links.map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href ||
@@ -68,11 +68,41 @@ export function AppShell({
                 key={href}
                 onClick={() => setMenuOpen(false)}
               >
-                <Icon size={21} strokeWidth={1.8} />
-                {label}
+                <Icon size={20} strokeWidth={1.8} />
+                <span>{label}</span>
               </Link>
             );
           })}
+
+          <div className="mobile-drawer-footer">
+            <div className="mobile-user-info">
+              <div className="avatar">{avatarText || "CA"}</div>
+              <div>
+                <strong>{user.displayName}</strong>
+                <small>{user.role}</small>
+              </div>
+            </div>
+            <div className="mobile-drawer-actions">
+              <Link className="nav-link" href="/search" onClick={() => setMenuOpen(false)}>
+                <Search size={20} />
+                <span>Search</span>
+              </Link>
+              <Link className="nav-link" href="/notifications" onClick={() => setMenuOpen(false)}>
+                <Bell size={20} />
+                <span>Notifications</span>
+              </Link>
+              <Link className="nav-link" href="/settings" onClick={() => setMenuOpen(false)}>
+                <Settings size={20} />
+                <span>Settings</span>
+              </Link>
+              <form action={logoutAction} className="mobile-logout-form">
+                <button className="nav-link mobile-logout-btn" type="submit">
+                  <LogOut size={20} />
+                  <span>Sign out</span>
+                </button>
+              </form>
+            </div>
+          </div>
         </nav>
 
         <div className="topbar-actions">
