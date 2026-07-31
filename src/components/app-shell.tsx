@@ -30,6 +30,14 @@ const links = [
   { href: "/reports", label: "Reports", icon: FileText },
 ];
 
+const stockManagerLinks = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/products", label: "Products", icon: Package },
+  { href: "/stock", label: "Stock Levels", icon: Boxes },
+  { href: "/stock/adjust", label: "Adjust Stock", icon: Package },
+  { href: "/reports", label: "Inventory Reports", icon: FileText },
+];
+
 export function AppShell({
   children,
   user,
@@ -39,6 +47,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const activeLinks = user.role === "inventory" ? stockManagerLinks : links;
   const avatarText = user.displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -56,7 +65,7 @@ export function AppShell({
         </Link>
 
         <nav className={`topnav ${menuOpen ? "open" : ""}`} aria-label="Main navigation">
-          {links.map(({ href, label, icon: Icon }) => {
+          {activeLinks.map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href ||
               (href !== "/dashboard" &&

@@ -48,6 +48,27 @@ async function seed() {
         },
       });
 
+    const stockManagerPasswordHash = await hash("Stocker123!@", 12);
+    await tx
+      .insert(users)
+      .values({
+        username: "stockmanager",
+        displayName: "Stock Manager",
+        passwordHash: stockManagerPasswordHash,
+        role: "inventory",
+        mustChangePassword: false,
+      })
+      .onConflictDoUpdate({
+        target: users.username,
+        set: {
+          displayName: "Stock Manager",
+          passwordHash: stockManagerPasswordHash,
+          role: "inventory",
+          isActive: true,
+          updatedAt: new Date(),
+        },
+      });
+
     await tx
       .insert(warehouses)
       .values({
