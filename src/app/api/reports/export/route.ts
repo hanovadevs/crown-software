@@ -7,6 +7,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const stockReportsOnly = ["stock", "inventory-movements", "products"];
+
 function csvCell(value: string | number) {
   const text = String(value ?? "");
   return `"${text.replaceAll('"', '""')}"`;
@@ -17,21 +19,27 @@ export async function GET(request: Request) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const url = new URL(request.url);
-  const requestedType = url.searchParams.get("type");
+  let requestedType = url.searchParams.get("type");
+  if (session.user.role === "inventory" && !stockReportsOnly.includes(requestedType ?? "")) {
+    requestedType = "stock";
+  }
+
   const type = reportTypes.includes(requestedType as ReportType)
     ? (requestedType as ReportType)
     : "transactions";
+
   const report = await buildReport(
     type,
     {
       start: url.searchParams.get("start") ?? undefined,
       end: url.searchParams.get("end") ?? undefined,
-      partyId: url.searchParams.get("partyId") ?? undefined,
+      partyId: session.user.role === "inventory" ? undefined : (url.searchParams.get("partyId") ?? undefined),
       productId: url.searchParams.get("productId") ?? undefined,
-      workerId: url.searchParams.get("workerId") ?? undefined,
+      workerId: session.user.role === "inventory" ? undefined : (url.searchParams.get("workerId") ?? undefined),
       warehouseId: url.searchParams.get("warehouseId") ?? undefined,
     },
   );
+
   const csv = [
     report.columns.map(csvCell).join(","),
     ...report.rows.map((row) =>

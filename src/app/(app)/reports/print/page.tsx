@@ -4,6 +4,7 @@ import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { getParty } from "@/db/business-queries";
 import { getWorkerWithPayments } from "@/db/operations-queries";
+import { requireUser } from "@/lib/auth";
 import { formatDate, formatPKR } from "@/lib/utils";
 import {
   buildReport,
@@ -13,26 +14,36 @@ import {
 
 export const metadata: Metadata = { title: "Print Report" };
 
+const stockReportsOnly = ["stock", "inventory-movements", "products"];
+
 export default async function PrintReportPage({
   searchParams,
 }: {
   searchParams: Promise<{ type?: string; start?: string; end?: string; partyId?: string; productId?: string; workerId?: string; warehouseId?: string }>;
 }) {
+  const user = await requireUser();
   const params = await searchParams;
-  const type = reportTypes.includes(params.type as ReportType)
-    ? (params.type as ReportType)
+
+  let rawType = params.type;
+  if (user.role === "inventory" && !stockReportsOnly.includes(rawType ?? "")) {
+    rawType = "stock";
+  }
+
+  const type = reportTypes.includes(rawType as ReportType)
+    ? (rawType as ReportType)
     : "transactions";
+
   const report = await buildReport(type, {
     start: params.start,
     end: params.end,
-    partyId: params.partyId,
+    partyId: user.role === "inventory" ? undefined : params.partyId,
     productId: params.productId,
-    workerId: params.workerId,
+    workerId: user.role === "inventory" ? undefined : params.workerId,
     warehouseId: params.warehouseId,
   });
 
-  const partyResult = params.partyId ? await getParty(params.partyId) : null;
-  const workerResult = params.workerId ? await getWorkerWithPayments(params.workerId) : null;
+  const partyResult = user.role !== "inventory" && params.partyId ? await getParty(params.partyId) : null;
+  const workerResult = user.role !== "inventory" && params.workerId ? await getWorkerWithPayments(params.workerId) : null;
 
   const periodText = params.start || params.end
     ? `${params.start || "Beginning"} – ${params.end || "Today"}`

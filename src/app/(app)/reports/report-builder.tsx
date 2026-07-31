@@ -5,7 +5,7 @@ import { useState } from "react";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { formatPKR } from "@/lib/utils";
 
-const reports = [
+const allReports = [
   { value: "transactions", title: "Transaction Report", description: "Detailed list of all transactions", icon: ArrowLeftRight, color: "#4169f6" },
   { value: "party-ledger", title: "Party Ledger Report", description: "Detailed ledger for one party or balance summary", icon: Users, color: "#18c77a" },
   { value: "parties", title: "Parties Report", description: "Customer and supplier information", icon: Users, color: "#ff950f" },
@@ -19,6 +19,8 @@ const reports = [
   { value: "individual-worker", title: "Individual Worker Report", description: "Detailed report for a specific worker", icon: UserCheck, color: "#ff7615" },
 ] as const;
 
+const stockReportsOnly = ["stock", "inventory-movements", "products"];
+
 type Options = {
   parties: Array<{ id: string; name: string; phone: string | null; receivable: string; payable: string }>;
   products: Array<{ id: string; name: string; sku: string }>;
@@ -26,14 +28,19 @@ type Options = {
   warehouses: Array<{ id: string; name: string; code: string }>;
 };
 
-export function ReportBuilder({ options }: { options: Options }) {
-  const [type, setType] = useState("transactions");
+export function ReportBuilder({ options, userRole }: { options: Options; userRole?: string }) {
+  const isStockManager = userRole === "inventory";
+  const reports = isStockManager
+    ? allReports.filter((r) => stockReportsOnly.includes(r.value))
+    : allReports;
+
+  const [type, setType] = useState(isStockManager ? "stock" : "transactions");
   const [partyId, setPartyId] = useState("");
   const [workerId, setWorkerId] = useState("");
 
-  const showParty = ["transactions", "party-ledger", "parties"].includes(type);
+  const showParty = !isStockManager && ["transactions", "party-ledger", "parties"].includes(type);
   const showProduct = ["transactions", "products", "stock", "inventory-movements"].includes(type);
-  const showWorker = ["workers", "worker-payment-status", "worker-payments", "individual-worker"].includes(type);
+  const showWorker = !isStockManager && ["workers", "worker-payment-status", "worker-payments", "individual-worker"].includes(type);
   const showWarehouse = ["stock", "inventory-movements"].includes(type);
 
   const selectedParty = options.parties.find((party) => party.id === partyId);
