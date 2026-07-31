@@ -24,13 +24,18 @@ const itemSchema = z.object({
 
 const billSchema = z.object({
   partyId: z.string().uuid(),
-  type: z.enum(["invoice", "quotation"]),
+  type: z.enum(["invoice", "quotation", "tax_invoice"]),
   billDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dueDate: z
     .string()
     .transform((value) => value || null)
     .nullable(),
+  supplierNtn: z.string().trim().max(80).transform((v) => v || null).nullable(),
+  buyerNtn: z.string().trim().max(80).transform((v) => v || null).nullable(),
+  timeOfSupply: z.string().trim().max(80).transform((v) => v || null).nullable(),
+  termsOfSales: z.string().trim().max(160).transform((v) => v || null).nullable(),
   taxRate: z.coerce.number().min(0).max(100),
+  sedRate: z.coerce.number().min(0).max(100),
   shippingAmount: z.coerce.number().nonnegative(),
   discountAmount: z.coerce.number().nonnegative(),
   notes: z.string().trim().max(3000).transform((value) => value || null),
@@ -58,7 +63,12 @@ export async function createBillAction(
     type: formData.get("type"),
     billDate: formData.get("billDate"),
     dueDate: formData.get("dueDate"),
+    supplierNtn: formData.get("supplierNtn") || "",
+    buyerNtn: formData.get("buyerNtn") || "",
+    timeOfSupply: formData.get("timeOfSupply") || "",
+    termsOfSales: formData.get("termsOfSales") || "",
     taxRate: formData.get("taxRate") || "0",
+    sedRate: formData.get("sedRate") || "0",
     shippingAmount: formData.get("shippingAmount") || "0",
     discountAmount: formData.get("discountAmount") || "0",
     notes: formData.get("notes") || "",
@@ -76,7 +86,7 @@ export async function createBillAction(
   }
 
   const [party] = await db
-    .select({ id: parties.id, isCustomer: parties.isCustomer })
+    .select({ id: parties.id, isCustomer: parties.isCustomer, taxNumber: parties.taxNumber })
     .from(parties)
     .where(and(eq(parties.id, value.partyId), eq(parties.isActive, true)))
     .limit(1);
@@ -97,20 +107,52 @@ export async function createBillAction(
     }
   }
 
-  const subtotal = value.items.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
-    0,
-  );
-  const taxAmount = subtotal * (value.taxRate / 100);
+  const isTaxInvoice = value.type === "tax_invoice";
+  const effectiveTaxRate = isTaxInvoice ? value.taxRate : value.taxRate;
+  const effectiveSedRate = isTaxInvoice ? value.sedRate : 0;
+
+  let subtotal = 0;
+  let totalSalesTax = 0;
+  let totalSed = 0;
+
+  const processedItems = value.items.map((item) => {
+    const baseAmount = item.quantity * item.unitPrice;
+    const itemSalesTax = baseAmount * (effectiveTaxRate / 100);
+    const itemSed = baseAmount * (effectiveSedRate / 100);
+    const lineTotal = baseAmount + itemSalesTax + itemSed;
+
+    subtotal += baseAmount;
+    totalSalesTax += itemSalesTax;
+    totalSed += itemSed;
+
+    return {
+      productId: item.productId,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      salesTaxRate: effectiveTaxRate,
+      salesTaxAmount: itemSalesTax,
+      sedRate: effectiveSedRate,
+      sedAmount: itemSed,
+      lineTotal,
+    };
+  });
+
   const total =
-    subtotal + taxAmount + value.shippingAmount - value.discountAmount;
+    subtotal + totalSalesTax + totalSed + value.shippingAmount - value.discountAmount;
   if (total < 0) return { error: "Discount cannot exceed the bill total." };
+
+  const prefixMap: Record<string, string> = {
+    invoice: "INV",
+    quotation: "QTN",
+    tax_invoice: "STI",
+  };
 
   const billId = await db.transaction(async (tx) => {
     const billNumber = await nextDocumentNumber(
       tx as unknown as Parameters<typeof nextDocumentNumber>[0],
       value.type,
-      value.type === "invoice" ? "INV" : "QTN",
+      prefixMap[value.type] || "INV",
       new Date(`${value.billDate}T00:00:00+05:00`),
     );
     const [created] = await tx
@@ -122,9 +164,15 @@ export async function createBillAction(
         partyId: value.partyId,
         billDate: value.billDate,
         dueDate: value.dueDate,
+        supplierNtn: value.supplierNtn,
+        buyerNtn: value.buyerNtn || party.taxNumber,
+        timeOfSupply: value.timeOfSupply,
+        termsOfSales: value.termsOfSales,
         subtotal: subtotal.toFixed(2),
-        taxRate: value.taxRate.toFixed(4),
-        taxAmount: taxAmount.toFixed(2),
+        taxRate: effectiveTaxRate.toFixed(4),
+        taxAmount: totalSalesTax.toFixed(2),
+        sedRate: effectiveSedRate.toFixed(4),
+        sedAmount: totalSed.toFixed(2),
         shippingAmount: value.shippingAmount.toFixed(2),
         discountAmount: value.discountAmount.toFixed(2),
         totalAmount: total.toFixed(2),
@@ -134,16 +182,21 @@ export async function createBillAction(
       .returning({ id: bills.id });
 
     await tx.insert(billItems).values(
-      value.items.map((item, index) => ({
+      processedItems.map((item, index) => ({
         billId: created.id,
         productId: item.productId,
         description: item.description,
         quantity: item.quantity.toFixed(3),
         unitPrice: item.unitPrice.toFixed(2),
-        lineTotal: (item.quantity * item.unitPrice).toFixed(2),
+        salesTaxRate: item.salesTaxRate.toFixed(4),
+        salesTaxAmount: item.salesTaxAmount.toFixed(2),
+        sedRate: item.sedRate.toFixed(4),
+        sedAmount: item.sedAmount.toFixed(2),
+        lineTotal: item.lineTotal.toFixed(2),
         sortOrder: index,
       })),
     );
+
     await tx.insert(auditLogs).values({
       userId: user.id,
       action: "create",

@@ -28,7 +28,7 @@ export function BillForm({
   products,
   today,
 }: {
-  customers: Array<{ id: string; name: string }>;
+  customers: Array<{ id: string; name: string; taxNumber?: string | null }>;
   products: ProductOption[];
   today: string;
 }) {
@@ -37,7 +37,14 @@ export function BillForm({
   const [items, setItems] = useState<BillItem[]>([
     { key: 1, productId: "", description: "", quantity: "1", unitPrice: "0" },
   ]);
+  const [billType, setBillType] = useState<"invoice" | "quotation" | "tax_invoice">("invoice");
+  const [selectedPartyId, setSelectedPartyId] = useState("");
   const [taxRate, setTaxRate] = useState("0");
+  const [sedRate, setSedRate] = useState("0");
+  const [supplierNtn, setSupplierNtn] = useState("1234567-8");
+  const [buyerNtn, setBuyerNtn] = useState("");
+  const [timeOfSupply, setTimeOfSupply] = useState("10:30 AM");
+  const [termsOfSales, setTermsOfSales] = useState("Cash");
   const [shipping, setShipping] = useState("0");
   const [discount, setDiscount] = useState("0");
 
@@ -50,9 +57,31 @@ export function BillForm({
       ),
     [items],
   );
-  const taxAmount = subtotal * ((Number(taxRate) || 0) / 100);
+
+  const isTaxInvoice = billType === "tax_invoice";
+  const effectiveTaxRate = Number(taxRate) || 0;
+  const effectiveSedRate = isTaxInvoice ? (Number(sedRate) || 0) : 0;
+
+  const salesTaxAmount = subtotal * (effectiveTaxRate / 100);
+  const sedAmount = subtotal * (effectiveSedRate / 100);
   const total =
-    subtotal + taxAmount + (Number(shipping) || 0) - (Number(discount) || 0);
+    subtotal + salesTaxAmount + sedAmount + (Number(shipping) || 0) - (Number(discount) || 0);
+
+  function handleTypeChange(newType: "invoice" | "quotation" | "tax_invoice") {
+    setBillType(newType);
+    if (newType === "tax_invoice" && taxRate === "0") {
+      setTaxRate("18");
+      setSedRate("1");
+    }
+  }
+
+  function handleCustomerChange(partyId: string) {
+    setSelectedPartyId(partyId);
+    const party = customers.find((c) => c.id === partyId);
+    if (party?.taxNumber) {
+      setBuyerNtn(party.taxNumber);
+    }
+  }
 
   function updateItem(key: number, patch: Partial<BillItem>) {
     setItems((current) =>
@@ -98,12 +127,19 @@ export function BillForm({
         <section className="card detail-form">
           <div className="form-section-heading">
             <FileText size={24} />
-            <h2>Bill Information</h2>
+            <h2>Bill & Invoice Information</h2>
           </div>
           <div className="form-grid">
             <div className="field">
               <label htmlFor="partyId">Customer *</label>
-              <select className="select" id="partyId" name="partyId" required>
+              <select
+                className="select"
+                id="partyId"
+                name="partyId"
+                required
+                value={selectedPartyId}
+                onChange={(e) => handleCustomerChange(e.target.value)}
+              >
                 <option value="">Select a customer</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
@@ -113,14 +149,21 @@ export function BillForm({
               </select>
             </div>
             <div className="field">
-              <label htmlFor="type">Bill Type</label>
-              <select className="select" defaultValue="invoice" id="type" name="type">
-                <option value="invoice">Invoice</option>
-                <option value="quotation">Quotation</option>
+              <label htmlFor="type">Document Type</label>
+              <select
+                className="select"
+                value={billType}
+                id="type"
+                name="type"
+                onChange={(e) => handleTypeChange(e.target.value as "invoice" | "quotation" | "tax_invoice")}
+              >
+                <option value="invoice">Commercial Invoice (INV)</option>
+                <option value="quotation">Quotation (QTN)</option>
+                <option value="tax_invoice">Sales Tax / S.E.D. Invoice (STI)</option>
               </select>
             </div>
             <div className="field">
-              <label htmlFor="billDate">Bill Date *</label>
+              <label htmlFor="billDate">Invoice Date *</label>
               <input
                 className="input"
                 defaultValue={today}
@@ -134,6 +177,55 @@ export function BillForm({
               <label htmlFor="dueDate">Due Date (Optional)</label>
               <input className="input" id="dueDate" name="dueDate" type="date" />
             </div>
+
+            {isTaxInvoice && (
+              <>
+                <div className="field">
+                  <label htmlFor="timeOfSupply">Time of Supply</label>
+                  <input
+                    className="input"
+                    id="timeOfSupply"
+                    name="timeOfSupply"
+                    value={timeOfSupply}
+                    onChange={(e) => setTimeOfSupply(e.target.value)}
+                    placeholder="e.g. 10:30 AM"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="termsOfSales">Terms of Sales</label>
+                  <input
+                    className="input"
+                    id="termsOfSales"
+                    name="termsOfSales"
+                    value={termsOfSales}
+                    onChange={(e) => setTermsOfSales(e.target.value)}
+                    placeholder="e.g. Cash / Credit 30 Days"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="supplierNtn">Supplier NTN / STRN</label>
+                  <input
+                    className="input"
+                    id="supplierNtn"
+                    name="supplierNtn"
+                    value={supplierNtn}
+                    onChange={(e) => setSupplierNtn(e.target.value)}
+                    placeholder="Supplier Sales Tax Registration No."
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="buyerNtn">Buyer NTN / STRN</label>
+                  <input
+                    className="input"
+                    id="buyerNtn"
+                    name="buyerNtn"
+                    value={buyerNtn}
+                    onChange={(e) => setBuyerNtn(e.target.value)}
+                    placeholder="Buyer National Tax No."
+                  />
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -141,16 +233,19 @@ export function BillForm({
           <div className="bill-items-header">
             <div className="form-section-heading">
               <PackagePlus size={24} />
-              <h2>Items</h2>
+              <h2>Line Items</h2>
             </div>
             <button className="button button-primary" onClick={addItem} type="button">
-              <Plus size={19} /> Add Item
+              <Plus size={19} /> Add Line Item
             </button>
           </div>
           <div className="bill-items">
             {items.map((item, index) => {
-              const lineTotal =
-                (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+              const baseVal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+              const stVal = baseVal * (effectiveTaxRate / 100);
+              const sedVal = baseVal * (effectiveSedRate / 100);
+              const lineTotal = baseVal + stVal + sedVal;
+
               return (
                 <article className="bill-item" key={item.key}>
                   <div className="bill-item-title">
@@ -172,7 +267,7 @@ export function BillForm({
                   </div>
                   <div className="bill-item-grid">
                     <div className="field bill-product-field">
-                      <label htmlFor={`product-${item.key}`}>Product / Service</label>
+                      <label htmlFor={`product-${item.key}`}>Product / Description</label>
                       <select
                         className="select"
                         id={`product-${item.key}`}
@@ -193,13 +288,13 @@ export function BillForm({
                         onChange={(event) =>
                           updateItem(item.key, { description: event.target.value })
                         }
-                        placeholder="Product/service description"
+                        placeholder="Item description"
                         required
                         value={item.description}
                       />
                     </div>
                     <div className="field">
-                      <label htmlFor={`quantity-${item.key}`}>Quantity</label>
+                      <label htmlFor={`quantity-${item.key}`}>Qty</label>
                       <input
                         className="input"
                         id={`quantity-${item.key}`}
@@ -213,7 +308,7 @@ export function BillForm({
                       />
                     </div>
                     <div className="field">
-                      <label htmlFor={`price-${item.key}`}>Unit Price (PKR)</label>
+                      <label htmlFor={`price-${item.key}`}>Rate (PKR)</label>
                       <input
                         className="input"
                         id={`price-${item.key}`}
@@ -227,7 +322,7 @@ export function BillForm({
                       />
                     </div>
                     <div className="bill-line-total">
-                      <span>Total</span>
+                      <span>{isTaxInvoice ? "Total Inc. Tax & SED" : "Total"}</span>
                       <strong>{formatPKR(lineTotal)}</strong>
                     </div>
                   </div>
@@ -240,7 +335,7 @@ export function BillForm({
         <section className="card detail-form">
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="taxRate">Tax Rate (%)</label>
+              <label htmlFor="taxRate">Sales Tax Rate (%)</label>
               <input
                 className="input"
                 id="taxRate"
@@ -253,8 +348,24 @@ export function BillForm({
                 value={taxRate}
               />
             </div>
+            {isTaxInvoice && (
+              <div className="field">
+                <label htmlFor="sedRate">S.E.D. Rate (%)</label>
+                <input
+                  className="input"
+                  id="sedRate"
+                  max="100"
+                  min="0"
+                  name="sedRate"
+                  onChange={(event) => setSedRate(event.target.value)}
+                  step="0.01"
+                  type="number"
+                  value={sedRate}
+                />
+              </div>
+            )}
             <div className="field">
-              <label htmlFor="shippingAmount">Shipping (PKR)</label>
+              <label htmlFor="shippingAmount">Shipping / Freight (PKR)</label>
               <input
                 className="input"
                 id="shippingAmount"
@@ -280,7 +391,7 @@ export function BillForm({
               />
             </div>
             <div className="field field-span-2">
-              <label htmlFor="notes">Notes / Terms</label>
+              <label htmlFor="notes">Notes / Sales Terms</label>
               <textarea
                 className="textarea"
                 id="notes"
@@ -294,16 +405,22 @@ export function BillForm({
 
       <aside className="billing-sidebar">
         <section className="card bill-summary-card">
-          <h2>Bill Summary</h2>
+          <h2>{isTaxInvoice ? "Tax Invoice Summary" : "Bill Summary"}</h2>
           <dl>
             <div>
-              <dt>Subtotal</dt>
+              <dt>Amount Exc. Tax & SED</dt>
               <dd>{formatPKR(subtotal)}</dd>
             </div>
             <div>
-              <dt>Tax ({Number(taxRate) || 0}%)</dt>
-              <dd>{formatPKR(taxAmount)}</dd>
+              <dt>Sales Tax ({effectiveTaxRate}%)</dt>
+              <dd>{formatPKR(salesTaxAmount)}</dd>
             </div>
+            {isTaxInvoice && (
+              <div>
+                <dt>S.E.D. ({effectiveSedRate}%)</dt>
+                <dd>{formatPKR(sedAmount)}</dd>
+              </div>
+            )}
             <div>
               <dt>Shipping</dt>
               <dd>{formatPKR(shipping)}</dd>
@@ -313,7 +430,7 @@ export function BillForm({
               <dd>− {formatPKR(discount)}</dd>
             </div>
             <div className="bill-grand-total">
-              <dt>Total Amount</dt>
+              <dt>Net Tax Inclusive Value</dt>
               <dd>{formatPKR(Math.max(total, 0))}</dd>
             </div>
           </dl>
@@ -328,7 +445,7 @@ export function BillForm({
             type="submit"
           >
             <Printer size={20} />
-            {pending ? "Generating…" : "Generate & Print Bill"}
+            {pending ? "Generating…" : "Generate & Print Invoice"}
           </button>
           <Link className="button button-secondary bill-cancel" href="/dashboard">
             Cancel
@@ -336,9 +453,9 @@ export function BillForm({
         </section>
         <section className="card quick-tips">
           <h2>Quick Tips</h2>
-          <p>• Select products to auto-fill current sale prices.</p>
-          <p>• Use Invoice for final bills and Quotation for estimates.</p>
-          <p>• Tax is configurable per bill and is not hard-coded.</p>
+          <p>• Fixed sequential numbering (INV, QTN, STI) auto-increments with zero duplication.</p>
+          <p>• Select &quot;Sales Tax / S.E.D. Invoice&quot; to print official tax documents.</p>
+          <p>• Automatic S.T. & S.E.D. rate breakdown per paper tax format.</p>
         </section>
       </aside>
     </form>

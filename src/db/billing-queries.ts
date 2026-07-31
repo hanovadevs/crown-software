@@ -7,7 +7,7 @@ import { billItems, bills, parties, products, users } from "./schema";
 export async function getBillFormOptions() {
   const [customers, productOptions] = await Promise.all([
     db
-      .select({ id: parties.id, name: parties.name })
+      .select({ id: parties.id, name: parties.name, taxNumber: parties.taxNumber, phone: parties.phone, address: parties.address })
       .from(parties)
       .where(eq(parties.isCustomer, true))
       .orderBy(parties.name),
@@ -34,9 +34,15 @@ export async function getBill(id: string) {
       status: bills.status,
       billDate: bills.billDate,
       dueDate: bills.dueDate,
+      supplierNtn: bills.supplierNtn,
+      buyerNtn: bills.buyerNtn,
+      timeOfSupply: bills.timeOfSupply,
+      termsOfSales: bills.termsOfSales,
       subtotal: bills.subtotal,
       taxRate: bills.taxRate,
       taxAmount: bills.taxAmount,
+      sedRate: bills.sedRate,
+      sedAmount: bills.sedAmount,
       shippingAmount: bills.shippingAmount,
       discountAmount: bills.discountAmount,
       totalAmount: bills.totalAmount,
@@ -47,6 +53,7 @@ export async function getBill(id: string) {
         phone: parties.phone,
         email: parties.email,
         address: parties.address,
+        taxNumber: parties.taxNumber,
       },
       createdBy: users.displayName,
     })
@@ -63,6 +70,10 @@ export async function getBill(id: string) {
       description: billItems.description,
       quantity: billItems.quantity,
       unitPrice: billItems.unitPrice,
+      salesTaxRate: billItems.salesTaxRate,
+      salesTaxAmount: billItems.salesTaxAmount,
+      sedRate: billItems.sedRate,
+      sedAmount: billItems.sedAmount,
       lineTotal: billItems.lineTotal,
       sku: products.sku,
     })
@@ -70,5 +81,6 @@ export async function getBill(id: string) {
     .leftJoin(products, eq(billItems.productId, products.id))
     .where(eq(billItems.billId, id))
     .orderBy(asc(billItems.sortOrder));
+
   return { bill, items };
 }

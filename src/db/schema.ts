@@ -44,7 +44,11 @@ export const paymentMethodEnum = pgEnum("payment_method", [
   "cheque",
   "credit",
 ]);
-export const billTypeEnum = pgEnum("bill_type", ["invoice", "quotation"]);
+export const billTypeEnum = pgEnum("bill_type", [
+  "invoice",
+  "quotation",
+  "tax_invoice",
+]);
 export const billStatusEnum = pgEnum("bill_status", [
   "draft",
   "issued",
@@ -453,11 +457,21 @@ export const bills = pgTable(
       .references(() => parties.id, { onDelete: "restrict" }),
     billDate: date("bill_date").notNull(),
     dueDate: date("due_date"),
+    supplierNtn: varchar("supplier_ntn", { length: 80 }),
+    buyerNtn: varchar("buyer_ntn", { length: 80 }),
+    timeOfSupply: varchar("time_of_supply", { length: 80 }),
+    termsOfSales: varchar("terms_of_sales", { length: 160 }),
     subtotal: numeric("subtotal", { precision: 18, scale: 2 }).notNull(),
     taxRate: numeric("tax_rate", { precision: 7, scale: 4 })
       .notNull()
       .default("0"),
     taxAmount: numeric("tax_amount", { precision: 18, scale: 2 })
+      .notNull()
+      .default("0"),
+    sedRate: numeric("sed_rate", { precision: 7, scale: 4 })
+      .notNull()
+      .default("0"),
+    sedAmount: numeric("sed_amount", { precision: 18, scale: 2 })
       .notNull()
       .default("0"),
     shippingAmount: numeric("shipping_amount", { precision: 18, scale: 2 })
@@ -499,6 +513,18 @@ export const billItems = pgTable(
     description: varchar("description", { length: 300 }).notNull(),
     quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
     unitPrice: numeric("unit_price", { precision: 18, scale: 2 }).notNull(),
+    salesTaxRate: numeric("sales_tax_rate", { precision: 7, scale: 4 })
+      .notNull()
+      .default("0"),
+    salesTaxAmount: numeric("sales_tax_amount", { precision: 18, scale: 2 })
+      .notNull()
+      .default("0"),
+    sedRate: numeric("sed_rate", { precision: 7, scale: 4 })
+      .notNull()
+      .default("0"),
+    sedAmount: numeric("sed_amount", { precision: 18, scale: 2 })
+      .notNull()
+      .default("0"),
     lineTotal: numeric("line_total", { precision: 18, scale: 2 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
   },
