@@ -116,7 +116,7 @@ export default async function BillPage({
                 </div>
                 <div className="tax-field-line">
                   <span className="field-label">Address</span>
-                  <span className="field-value">Factory Industrial Area, Main Highway</span>
+                  <span className="field-value">55/28-C, AKBAR COLONY, MOMINPURA ROAD, DAROGHAWALA, LAHORE</span>
                 </div>
                 <div className="tax-field-line">
                   <span className="field-label">Telephone No.</span>
@@ -273,7 +273,8 @@ export default async function BillPage({
               />
               <div>
                 <h1>Crown Accumulator</h1>
-                <p>Battery Manufacturing & Management System</p>
+                <p style={{ fontWeight: 600, color: "#1e293b", margin: "2px 0" }}>55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore</p>
+                <p style={{ fontSize: "12px", opacity: 0.8 }}>Battery Manufacturing &amp; Management System</p>
               </div>
             </div>
             <div className="invoice-solo">

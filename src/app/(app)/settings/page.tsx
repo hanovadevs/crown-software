@@ -38,6 +38,18 @@ export default async function SettingsPage() {
               <dd>{company.name ?? "Crown Accumulator"}</dd>
             </div>
             <div>
+              <dt>Factory Address</dt>
+              <dd>{company.address ?? "55/28-C, AKBAR COLONY, MOMINPURA ROAD, DAROGHAWALA, LAHORE"}</dd>
+            </div>
+            <div>
+              <dt>Phone / Contact</dt>
+              <dd>{company.phone ?? "+92 300 1234567"}</dd>
+            </div>
+            <div>
+              <dt>Sales Tax NTN</dt>
+              <dd>{company.taxNumber ?? "1234567-8"}</dd>
+            </div>
+            <div>
               <dt>Currency</dt>
               <dd>{company.currency ?? "PKR"}</dd>
             </div>

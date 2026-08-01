@@ -129,6 +129,9 @@ async function seed() {
           value: {
             name: "Crown Accumulator",
             subtitle: "Battery Management System",
+            address: "55/28-C, AKBAR COLONY, MOMINPURA ROAD, DAROGHAWALA, LAHORE",
+            phone: "+92 300 1234567",
+            taxNumber: "1234567-8",
             timezone: "Asia/Karachi",
             currency: "PKR",
           },

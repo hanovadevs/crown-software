@@ -85,7 +85,8 @@ export default async function PrintReportPage({
             <Image className="print-brand-logo" src="/CrownAccumulatorbox.jpeg" alt="Crown Accumulator" width={300} height={291} />
             <div>
               <h1>Crown Accumulator</h1>
-              <p>Battery Management System · Professional Business Solutions</p>
+              <p style={{ fontWeight: 600, color: "#1e293b", margin: "2px 0" }}>55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore</p>
+              <p style={{ fontSize: "12px", opacity: 0.8 }}>Battery Management System · Professional Business Solutions</p>
             </div>
           </div>
           <div className="invoice-solo">
