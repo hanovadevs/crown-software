@@ -508,21 +508,34 @@ export async function buildReport(
   }
 
   if (type === "bank-balances") {
-    const data = await db
-      .select()
-      .from(bankAccounts)
-      .where(eq(bankAccounts.isActive, true))
-      .orderBy(bankAccounts.name);
+    const data = await db.execute(sql`
+      SELECT
+        b.id,
+        b.name,
+        b.bank_name,
+        b.account_number,
+        b.is_cash_account,
+        b.opening_balance,
+        ${Number(0)} + Number(b.opening_balance)
+        + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_deposit', 'customer_receipt') OR (t.type = 'sale' AND t.payment_method IN ('cash', 'bank')))), 0)
+        - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_withdrawal', 'supplier_payment') OR (t.type = 'purchase' AND t.payment_method IN ('cash', 'bank')))), 0)
+        AS current_balance
+      FROM bank_accounts b
+      LEFT JOIN transactions t ON (t.bank_account_id = b.id OR (b.is_cash_account AND t.payment_method = 'cash'))
+      WHERE b.is_active
+      GROUP BY b.id
+      ORDER BY b.name
+    `);
 
     let totalCashBank = 0;
-    const rows = data.map((acc) => {
-      const bal = Number(acc.openingBalance);
+    const rows = data.rows.map((acc) => {
+      const bal = Number(acc.current_balance);
       totalCashBank += bal;
       return {
-        Account: acc.name,
-        Bank: acc.bankName ?? "Cash Account",
-        "Account #": acc.accountNumber ?? "—",
-        Type: acc.isCashAccount ? "Cash in Hand" : "Bank Account",
+        Account: String(acc.name),
+        Bank: String(acc.bank_name || "Cash Account"),
+        "Account #": String(acc.account_number || "—"),
+        Type: acc.is_cash_account ? "Cash in Hand" : "Bank Account",
         Balance: formatPKR(bal),
       };
     });
@@ -535,7 +548,7 @@ export async function buildReport(
         totalDebit: 0,
         totalCredit: 0,
         closingBalance: totalCashBank,
-        label1: "Total Bank Liquidity",
+        label1: "Total Liquidity",
         val1: formatPKR(totalCashBank),
       },
       rows,

@@ -50,12 +50,12 @@ export async function listParties(search = "", type = "all") {
       isSupplier: parties.isSupplier,
       receivable: sql<string>`
         ${parties.openingReceivable}
-        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'sale'), 0)
+        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'sale' AND t.payment_method = 'credit'), 0)
         - COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'customer_receipt'), 0)
       `,
       payable: sql<string>`
         ${parties.openingPayable}
-        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'purchase'), 0)
+        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'purchase' AND t.payment_method = 'credit'), 0)
         - COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'supplier_payment'), 0)
       `,
     })
@@ -90,10 +90,10 @@ export async function getParty(partyId: string) {
     db.execute(sql`
       SELECT
         ${Number(party.openingReceivable)}
-          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'sale' AND status = 'posted'), 0)
+          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'sale' AND payment_method = 'credit' AND status = 'posted'), 0)
           - COALESCE(SUM(total_amount) FILTER (WHERE type = 'customer_receipt' AND status = 'posted'), 0) AS receivable,
         ${Number(party.openingPayable)}
-          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'purchase' AND status = 'posted'), 0)
+          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'purchase' AND payment_method = 'credit' AND status = 'posted'), 0)
           - COALESCE(SUM(total_amount) FILTER (WHERE type = 'supplier_payment' AND status = 'posted'), 0) AS payable
       FROM transactions
       WHERE party_id = ${partyId}

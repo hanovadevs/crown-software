@@ -647,11 +647,13 @@ export async function createTransactionAction(
         bankAccountId: value.bankAccountId,
       };
 
+      const cashOrBank = value.paymentMethod === "credit" ? cash : (value.bankAccountId ? cash : cash);
+
       if (value.type === "sale") {
         lines.push(
           {
             ...base,
-            accountId: value.paymentMethod === "credit" ? receivable : cash,
+            accountId: value.paymentMethod === "credit" ? receivable : cashOrBank,
             side: "debit",
             amount,
           },
@@ -681,30 +683,30 @@ export async function createTransactionAction(
           { ...base, accountId: inventory, side: "debit", amount },
           {
             ...base,
-            accountId: value.paymentMethod === "credit" ? payable : cash,
+            accountId: value.paymentMethod === "credit" ? payable : cashOrBank,
             side: "credit",
             amount,
           },
         );
       } else if (value.type === "bank_deposit") {
         lines.push(
-          { ...base, accountId: cash, side: "debit", amount },
+          { ...base, accountId: cashOrBank, side: "debit", amount },
           { ...base, accountId: equity, side: "credit", amount },
         );
       } else if (value.type === "bank_withdrawal") {
         lines.push(
           { ...base, accountId: equity, side: "debit", amount },
-          { ...base, accountId: cash, side: "credit", amount },
+          { ...base, accountId: cashOrBank, side: "credit", amount },
         );
       } else if (value.type === "customer_receipt") {
         lines.push(
-          { ...base, accountId: cash, side: "debit", amount },
+          { ...base, accountId: cashOrBank, side: "debit", amount },
           { ...base, accountId: receivable, side: "credit", amount },
         );
       } else {
         lines.push(
           { ...base, accountId: payable, side: "debit", amount },
-          { ...base, accountId: cash, side: "credit", amount },
+          { ...base, accountId: cashOrBank, side: "credit", amount },
         );
       }
 

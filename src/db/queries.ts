@@ -22,16 +22,16 @@ export async function getDashboardSummary() {
       db.execute(sql`
         SELECT
           COALESCE((SELECT SUM(opening_receivable) FROM parties WHERE is_active), 0)
-            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'sale'), 0)
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'sale' AND payment_method = 'credit'), 0)
             - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'customer_receipt'), 0)
             AS receivables,
           COALESCE((SELECT SUM(opening_payable) FROM parties WHERE is_active), 0)
-            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'purchase'), 0)
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'purchase' AND payment_method = 'credit'), 0)
             - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'supplier_payment'), 0)
             AS payables,
           COALESCE((SELECT SUM(opening_balance) FROM bank_accounts WHERE is_active), 0)
-            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type IN ('bank_deposit', 'customer_receipt')), 0)
-            - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type IN ('bank_withdrawal', 'supplier_payment')), 0)
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND (type IN ('bank_deposit', 'customer_receipt') OR (type = 'sale' AND payment_method IN ('cash', 'bank')))), 0)
+            - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND (type IN ('bank_withdrawal', 'supplier_payment') OR (type = 'purchase' AND payment_method IN ('cash', 'bank')))), 0)
             AS company_balance
       `),
       db.execute(sql`
