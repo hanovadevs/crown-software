@@ -331,6 +331,8 @@ export const transactions = pgTable(
     index("transactions_date_idx").on(table.transactionDate),
     index("transactions_party_idx").on(table.partyId),
     index("transactions_product_idx").on(table.productId),
+    index("transactions_status_type_idx").on(table.status, table.type),
+    index("transactions_party_status_idx").on(table.partyId, table.status),
     check("transactions_amount_positive", sql`${table.totalAmount} > 0`),
     check(
       "transactions_quantity_nonnegative",
@@ -375,6 +377,7 @@ export const inventoryMovements = pgTable(
       table.productId,
       table.warehouseId,
     ),
+    index("inventory_movements_product_id_idx").on(table.productId),
     index("inventory_movements_occurred_at_idx").on(table.occurredAt),
     check("inventory_movement_not_zero", sql`${table.quantityDelta} <> 0`),
   ],

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
+import { cache } from "react";
 import { and, eq, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -43,7 +44,7 @@ export async function createSession(
   });
 }
 
-export async function getSession() {
+export const getSession = cache(async function getSession() {
   const token = (await cookies()).get(cookieName())?.value;
   if (!token) return null;
 
@@ -71,7 +72,7 @@ export async function getSession() {
     .limit(1);
 
   return session ?? null;
-}
+});
 
 export async function requireUser() {
   const session = await getSession();

@@ -27,9 +27,6 @@ function createPool() {
 }
 
 export const pool = globalForDb.crownPool ?? createPool();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.crownPool = pool;
-}
+globalForDb.crownPool = pool;
 
 export const db = drizzle(pool, { schema });
