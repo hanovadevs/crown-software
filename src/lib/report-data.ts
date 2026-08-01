@@ -29,7 +29,7 @@ export const reportTypes = [
 ] as const;
 export type ReportType = (typeof reportTypes)[number];
 
-type ReportRow = Record<string, string | number>;
+export type ReportRow = Record<string, string | number>;
 
 export type ReportFilters = {
   start?: string;
@@ -38,6 +38,39 @@ export type ReportFilters = {
   productId?: string;
   workerId?: string;
   warehouseId?: string;
+};
+
+export type PartyInfo = {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  taxNumber: string | null;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  openingReceivable: number;
+  openingPayable: number;
+};
+
+export type SummaryStats = {
+  openingBalance: number;
+  totalDebit: number;
+  totalCredit: number;
+  closingBalance: number;
+  label1?: string;
+  val1?: string;
+  label2?: string;
+  val2?: string;
+};
+
+export type ReportResult = {
+  title: string;
+  columns: string[];
+  rows: ReportRow[];
+  partyInfo?: PartyInfo;
+  summaryStats?: SummaryStats;
 };
 
 function dateConditions(start?: string, end?: string) {
@@ -50,8 +83,9 @@ function dateConditions(start?: string, end?: string) {
 export async function buildReport(
   type: ReportType,
   filters: ReportFilters = {},
-): Promise<{ title: string; columns: string[]; rows: ReportRow[] }> {
+): Promise<ReportResult> {
   const { start, end } = filters;
+
   if (type === "transactions") {
     const conditions = dateConditions(start, end);
     if (filters.partyId) conditions.push(eq(transactions.partyId, filters.partyId));
@@ -74,6 +108,19 @@ export async function buildReport(
       .leftJoin(products, eq(transactions.productId, products.id))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(transactions.transactionDate));
+
+    let totalDebit = 0;
+    let totalCredit = 0;
+    for (const d of data) {
+      if (d.status !== "posted") continue;
+      const amt = Number(d.amount);
+      if (["sale", "supplier_payment", "bank_withdrawal"].includes(d.type)) {
+        totalDebit += amt;
+      } else {
+        totalCredit += amt;
+      }
+    }
+
     return {
       title: "Transactions Report",
       columns: [
@@ -88,17 +135,25 @@ export async function buildReport(
         "Status",
         "Payment Method",
       ],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit,
+        totalCredit,
+        closingBalance: totalDebit - totalCredit,
+        label1: "Total Volume",
+        val1: formatPKR(totalDebit + totalCredit),
+      },
       rows: data.map((row) => ({
         Number: row.number,
         Type: row.type.replaceAll("_", " "),
         Description: row.description,
-        Party: row.party ?? "",
-        Product: row.product ?? "",
+        Party: row.party ?? "—",
+        Product: row.product ?? "—",
         Quantity: Number(row.quantity ?? 0),
         Amount: formatPKR(row.amount),
         Date: formatDate(row.date),
         Status: row.status,
-        "Payment Method": row.paymentMethod,
+        "Payment Method": row.paymentMethod.replaceAll("_", " "),
       })),
     };
   }
@@ -106,6 +161,7 @@ export async function buildReport(
   if (type === "party-ledger" && filters.partyId) {
     const [party] = await db.select().from(parties).where(eq(parties.id, filters.partyId)).limit(1);
     if (!party) return { title: "Party Ledger", columns: [], rows: [] };
+
     const activity = await db
       .select({
         number: transactions.transactionNumber,
@@ -119,42 +175,95 @@ export async function buildReport(
       .from(transactions)
       .where(eq(transactions.partyId, filters.partyId))
       .orderBy(asc(transactions.transactionDate), asc(transactions.createdAt));
-    let balance = Number(party.openingReceivable) - Number(party.openingPayable);
+
+    const openingBalance = Number(party.openingReceivable) - Number(party.openingPayable);
+    let runningBalance = openingBalance;
+    let periodTotalDebit = 0;
+    let periodTotalCredit = 0;
+
     const rows: ReportRow[] = [];
+
+    // Pre-calculate running balance up to start date
     for (const item of activity) {
       if (item.status !== "posted") continue;
       const amount = Number(item.amount);
-      const delta = item.type === "sale" || item.type === "supplier_payment"
-        ? amount
-        : item.type === "purchase" || item.type === "customer_receipt"
-          ? -amount
-          : 0;
+      const delta =
+        item.type === "sale" || item.type === "supplier_payment"
+          ? amount
+          : item.type === "purchase" || item.type === "customer_receipt"
+            ? -amount
+            : 0;
+
       if (start && item.date < start) {
-        balance += delta;
-        continue;
+        runningBalance += delta;
       }
+    }
+
+    const effectiveOpening = runningBalance;
+
+    // Push Opening Balance Row
+    rows.push({
+      Date: start ? formatDate(start) : "Opening",
+      Number: "—",
+      Type: "Opening Balance",
+      Description: "Opening balance brought forward",
+      Debit: "—",
+      Credit: "—",
+      Balance: `${formatPKR(Math.abs(effectiveOpening))} ${effectiveOpening >= 0 ? "Dr" : "Cr"}`,
+      Payment: "—",
+    });
+
+    for (const item of activity) {
+      if (item.status !== "posted") continue;
+      if (start && item.date < start) continue;
       if (end && item.date > end) continue;
-      if (!rows.length) {
-        rows.push({ Date: start ? formatDate(start) : "", Number: "", Type: "opening", Description: "Opening balance", Debit: "", Credit: "", Balance: formatPKR(balance), Payment: "" });
-      }
-      balance += delta;
+
+      const amount = Number(item.amount);
+      const isDebit = item.type === "sale" || item.type === "supplier_payment";
+      const isCredit = item.type === "purchase" || item.type === "customer_receipt";
+      const delta = isDebit ? amount : isCredit ? -amount : 0;
+
+      if (isDebit) periodTotalDebit += amount;
+      if (isCredit) periodTotalCredit += amount;
+
+      runningBalance += delta;
+
       rows.push({
         Date: formatDate(item.date),
         Number: item.number,
-        Type: item.type.replaceAll("_", " "),
+        Type: item.type.replaceAll("_", " ").toUpperCase(),
         Description: item.description,
-        Debit: delta > 0 ? formatPKR(delta) : "",
-        Credit: delta < 0 ? formatPKR(Math.abs(delta)) : "",
-        Balance: formatPKR(balance),
+        Debit: isDebit ? formatPKR(amount) : "—",
+        Credit: isCredit ? formatPKR(amount) : "—",
+        Balance: `${formatPKR(Math.abs(runningBalance))} ${runningBalance >= 0 ? "Dr" : "Cr"}`,
         Payment: item.paymentMethod.replaceAll("_", " "),
       });
     }
-    if (!rows.length) {
-      rows.push({ Date: start ? formatDate(start) : "", Number: "", Type: "opening", Description: "Opening balance", Debit: "", Credit: "", Balance: formatPKR(balance), Payment: "" });
-    }
+
+    const partyInfo: PartyInfo = {
+      id: party.id,
+      name: party.name,
+      contactPerson: party.contactPerson,
+      phone: party.phone,
+      email: party.email,
+      address: party.address,
+      taxNumber: party.taxNumber,
+      isCustomer: party.isCustomer,
+      isSupplier: party.isSupplier,
+      openingReceivable: Number(party.openingReceivable),
+      openingPayable: Number(party.openingPayable),
+    };
+
     return {
       title: `Party Ledger - ${party.name}`,
       columns: ["Date", "Number", "Type", "Description", "Debit", "Credit", "Balance", "Payment"],
+      partyInfo,
+      summaryStats: {
+        openingBalance: effectiveOpening,
+        totalDebit: periodTotalDebit,
+        totalCredit: periodTotalCredit,
+        closingBalance: runningBalance,
+      },
       rows,
     };
   }
@@ -184,270 +293,258 @@ export async function buildReport(
       .from(parties)
       .where(and(...partyConditions))
       .orderBy(parties.name);
+
+    let totRec = 0;
+    let totPay = 0;
+
+    const rows = data.map((party) => {
+      const rec = Number(party.receivable);
+      const pay = Number(party.payable);
+      totRec += rec;
+      totPay += pay;
+      const net = rec - pay;
+
+      return {
+        Party: party.name,
+        Contact: party.contact ?? "—",
+        Phone: party.phone ?? "—",
+        Role: party.isCustomer && party.isSupplier ? "Customer & Supplier" : party.isCustomer ? "Customer" : "Supplier",
+        Receivable: formatPKR(rec),
+        Payable: formatPKR(pay),
+        "Net Balance": `${formatPKR(Math.abs(net))} ${net >= 0 ? "Receivable" : "Payable"}`,
+      };
+    });
+
     return {
-      title: type === "parties" ? "Parties Report" : "Party Ledger Report",
-      columns: [
-        "Name",
-        "Type",
-        "Contact",
-        "Phone",
-        "Email",
-        "Receivable",
-        "Payable",
-      ],
-      rows: data.map((row) => ({
-        Name: row.name,
-        Type:
-          row.isCustomer && row.isSupplier
-            ? "Customer & Supplier"
-            : row.isCustomer
-              ? "Customer"
-              : "Supplier",
-        Contact: row.contact ?? "",
-        Phone: row.phone ?? "",
-        Email: row.email ?? "",
-        Receivable: formatPKR(row.receivable),
-        Payable: formatPKR(row.payable),
+      title: "Parties Directory & Summary Ledger",
+      columns: ["Party", "Contact", "Phone", "Role", "Receivable", "Payable", "Net Balance"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: totRec,
+        totalCredit: totPay,
+        closingBalance: totRec - totPay,
+        label1: "Total Receivables",
+        val1: formatPKR(totRec),
+        label2: "Total Payables",
+        val2: formatPKR(totPay),
+      },
+      rows,
+    };
+  }
+
+  if (type === "products") {
+    const data = await db
+      .select()
+      .from(products)
+      .where(eq(products.isActive, true))
+      .orderBy(products.name);
+
+    return {
+      title: "Product Catalog & Pricing Report",
+      columns: ["SKU", "Product Name", "Category", "Brand", "Unit", "Sale Price", "Purchase Price", "Reorder Level"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: 0,
+        totalCredit: 0,
+        closingBalance: 0,
+        label1: "Total SKUs",
+        val1: String(data.length),
+      },
+      rows: data.map((item) => ({
+        SKU: item.sku,
+        "Product Name": item.name,
+        Category: item.category ?? "General",
+        Brand: item.brand,
+        Unit: item.unit,
+        "Sale Price": formatPKR(item.salePrice),
+        "Purchase Price": formatPKR(item.purchasePrice),
+        "Reorder Level": `${Number(item.reorderLevel).toLocaleString()} ${item.unit}`,
       })),
     };
   }
 
-  if (type === "products" || type === "stock") {
-    const productConditions: SQL[] = [eq(products.isActive, true)];
-    if (filters.productId) productConditions.push(eq(products.id, filters.productId));
-    const data = await db
-      .select({
-        sku: products.sku,
-        name: products.name,
-        brand: products.brand,
-        category: products.category,
-        unit: products.unit,
-        purchasePrice: products.purchasePrice,
-        salePrice: products.salePrice,
-        reorderLevel: products.reorderLevel,
-        isSellable: products.isSellable,
-        isPurchasable: products.isPurchasable,
-        stock: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)`,
-      })
-      .from(products)
-      .leftJoin(
-        inventoryMovements,
-        filters.warehouseId
-          ? and(eq(products.id, inventoryMovements.productId), eq(inventoryMovements.warehouseId, filters.warehouseId))
-          : eq(products.id, inventoryMovements.productId),
-      )
-      .where(and(...productConditions))
-      .groupBy(products.id)
-      .orderBy(products.name);
+  if (type === "stock") {
+    const conditions: SQL[] = [eq(products.isActive, true)];
+    if (filters.productId) conditions.push(eq(products.id, filters.productId));
+
+    const data = await db.execute(sql`
+      SELECT
+        p.id,
+        p.sku,
+        p.name,
+        p.brand,
+        p.category,
+        p.unit,
+        p.purchase_price,
+        p.reorder_level,
+        COALESCE(SUM(im.quantity_delta), 0) AS current_stock
+      FROM products p
+      LEFT JOIN inventory_movements im ON im.product_id = p.id
+      WHERE p.is_active
+      ${filters.productId ? sql`AND p.id = ${filters.productId}` : sql``}
+      GROUP BY p.id
+      ORDER BY p.name
+    `);
+
+    let totalStockUnits = 0;
+    let totalValuation = 0;
+
+    const rows = data.rows.map((row) => {
+      const stock = Number(row.current_stock);
+      const price = Number(row.purchase_price);
+      const val = stock * price;
+      totalStockUnits += stock;
+      totalValuation += val;
+
+      return {
+        SKU: String(row.sku),
+        Product: String(row.name),
+        Brand: String(row.brand),
+        Category: String(row.category || "General"),
+        "Current Stock": `${stock.toLocaleString()} ${row.unit}`,
+        "Reorder Level": `${Number(row.reorder_level).toLocaleString()} ${row.unit}`,
+        "Stock Valuation": formatPKR(val),
+        Status: stock <= Number(row.reorder_level) ? (stock <= 0 ? "OUT OF STOCK" : "LOW STOCK") : "HEALTHY",
+      };
+    });
+
     return {
-      title: type === "products" ? "Product Report" : "Stock Report",
-      columns: [
-        "SKU",
-        "Product",
-        "Brand",
-        "Category",
-        "Business Role",
-        "Stock",
-        "Unit",
-        "Purchase Price",
-        "Sale Price",
-        "Stock Value",
-        "Status",
-      ],
-      rows: data.map((row) => ({
-        SKU: row.sku,
-        Product: row.name,
-        Brand: row.brand,
-        Category: row.category ?? "",
-        "Business Role": row.isSellable && row.isPurchasable ? "Sell & Purchase" : row.isSellable ? "Sell" : "Purchase",
-        Stock: Number(row.stock),
-        Unit: row.unit,
-        "Purchase Price": formatPKR(row.purchasePrice),
-        "Sale Price": formatPKR(row.salePrice),
-        "Stock Value": formatPKR(Number(row.stock) * Number(row.purchasePrice)),
-        Status:
-          Number(row.stock) <= Number(row.reorderLevel) ? "Low stock" : "In stock",
-      })),
+      title: "Inventory Stock Levels & Valuation Report",
+      columns: ["SKU", "Product", "Brand", "Category", "Current Stock", "Reorder Level", "Stock Valuation", "Status"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: 0,
+        totalCredit: 0,
+        closingBalance: 0,
+        label1: "Total Units",
+        val1: totalStockUnits.toLocaleString(),
+        label2: "Inventory Valuation",
+        val2: formatPKR(totalValuation),
+      },
+      rows,
     };
   }
 
   if (type === "inventory-movements") {
     const conditions: SQL[] = [];
-    if (start) conditions.push(gte(inventoryMovements.occurredAt, new Date(`${start}T00:00:00`)));
-    if (end) conditions.push(lte(inventoryMovements.occurredAt, new Date(`${end}T23:59:59.999`)));
     if (filters.productId) conditions.push(eq(inventoryMovements.productId, filters.productId));
     if (filters.warehouseId) conditions.push(eq(inventoryMovements.warehouseId, filters.warehouseId));
+    if (start) conditions.push(gte(inventoryMovements.occurredAt, new Date(start)));
+    if (end) conditions.push(lte(inventoryMovements.occurredAt, new Date(end)));
+
     const data = await db
       .select({
-        reference: inventoryMovements.reference,
-        product: products.name,
+        movementId: inventoryMovements.id,
+        productName: products.name,
         sku: products.sku,
-        warehouse: warehouses.name,
-        type: inventoryMovements.movementType,
-        quantity: inventoryMovements.quantityDelta,
+        unit: products.unit,
+        warehouseName: warehouses.name,
+        movementType: inventoryMovements.movementType,
+        quantityDelta: inventoryMovements.quantityDelta,
         unitCost: inventoryMovements.unitCost,
-        notes: inventoryMovements.notes,
         occurredAt: inventoryMovements.occurredAt,
+        reference: inventoryMovements.reference,
+        notes: inventoryMovements.notes,
       })
       .from(inventoryMovements)
       .innerJoin(products, eq(inventoryMovements.productId, products.id))
       .innerJoin(warehouses, eq(inventoryMovements.warehouseId, warehouses.id))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(inventoryMovements.occurredAt));
-    return {
-      title: "Inventory Movement Report",
-      columns: ["Reference", "Product", "SKU", "Warehouse", "Movement", "Quantity", "Unit Cost", "Value", "Date", "Notes"],
-      rows: data.map((row) => ({
-        Reference: row.reference ?? "",
-        Product: row.product,
-        SKU: row.sku,
-        Warehouse: row.warehouse,
-        Movement: row.type.replaceAll("_", " "),
-        Quantity: Number(row.quantity),
-        "Unit Cost": formatPKR(row.unitCost),
-        Value: formatPKR(Math.abs(Number(row.quantity)) * Number(row.unitCost)),
-        Date: formatDate(row.occurredAt),
-        Notes: row.notes ?? "",
-      })),
-    };
-  }
 
-  if (type === "worker-payments") {
-    const conditions: SQL[] = [];
-    if (start) conditions.push(gte(workerPayments.salaryMonth, start));
-    if (end) conditions.push(lte(workerPayments.salaryMonth, end));
-    if (filters.workerId) conditions.push(eq(workerPayments.workerId, filters.workerId));
-    const data = await db
-      .select({
-        code: workers.workerCode,
-        worker: workers.name,
-        month: workerPayments.salaryMonth,
-        gross: workerPayments.grossAmount,
-        advance: workerPayments.advanceAmount,
-        deduction: workerPayments.deductionAmount,
-        paid: workerPayments.paidAmount,
-        status: workerPayments.status,
-        paidAt: workerPayments.paidAt,
-        notes: workerPayments.notes,
-      })
-      .from(workerPayments)
-      .innerJoin(workers, eq(workerPayments.workerId, workers.id))
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(workerPayments.salaryMonth), asc(workers.name));
     return {
-      title: "Worker Payment History",
-      columns: ["Worker Code", "Worker", "Salary Month", "Gross Salary", "Advance", "Deduction", "Net Payable", "Paid", "Balance", "Status", "Paid Date", "Notes"],
-      rows: data.map((row) => {
-        const net = Number(row.gross) - Number(row.advance) - Number(row.deduction);
+      title: "Stock Movement History Report",
+      columns: ["Product", "SKU", "Warehouse", "Movement Type", "Quantity Delta", "Reference", "Date"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: 0,
+        totalCredit: 0,
+        closingBalance: 0,
+        label1: "Total Movements",
+        val1: String(data.length),
+      },
+      rows: data.map((item) => {
+        const qty = Number(item.quantityDelta);
         return {
-          "Worker Code": row.code,
-          Worker: row.worker,
-          "Salary Month": formatDate(row.month),
-          "Gross Salary": formatPKR(row.gross),
-          Advance: formatPKR(row.advance),
-          Deduction: formatPKR(row.deduction),
-          "Net Payable": formatPKR(net),
-          Paid: formatPKR(row.paid),
-          Balance: formatPKR(Math.max(net - Number(row.paid), 0)),
-          Status: row.status,
-          "Paid Date": row.paidAt ? formatDate(row.paidAt) : "",
-          Notes: row.notes ?? "",
+          Product: item.productName,
+          SKU: item.sku,
+          Warehouse: item.warehouseName,
+          "Movement Type": String(item.movementType).replaceAll("_", " ").toUpperCase(),
+          "Quantity Delta": qty > 0 ? `+${qty.toLocaleString()} ${item.unit}` : `${qty.toLocaleString()} ${item.unit}`,
+          Reference: item.reference ?? "—",
+          Date: formatDate(item.occurredAt),
         };
       }),
     };
   }
 
-  if (
-    type === "workers" ||
-    type === "worker-payment-status" ||
-    type === "individual-worker"
-  ) {
-    const workerConditions: SQL[] = [];
-    if (filters.workerId) workerConditions.push(eq(workers.id, filters.workerId));
+  if (type === "workers" || type === "worker-payment-status" || type === "worker-payments" || type === "individual-worker") {
     const data = await db
-      .select({
-        code: workers.workerCode,
-        name: workers.name,
-        designation: workers.designation,
-        phone: workers.phone,
-        salary: workers.monthlySalary,
-        joiningDate: workers.joiningDate,
-        status: workers.status,
-        paid: sql<string>`COALESCE(SUM(${workerPayments.paidAmount}), 0)`,
-        deductions: sql<string>`COALESCE(SUM(${workerPayments.deductionAmount}), 0)`,
-      })
+      .select()
       .from(workers)
-      .leftJoin(workerPayments, eq(workers.id, workerPayments.workerId))
-      .where(workerConditions.length ? and(...workerConditions) : undefined)
-      .groupBy(workers.id)
+      .where(eq(workers.status, "active"))
       .orderBy(workers.name);
+
     return {
-      title:
-        type === "workers"
-          ? "Worker Report"
-          : type === "worker-payment-status"
-            ? "Worker Payment Status"
-            : "Individual Worker Report",
-      columns: [
-        "Code",
-        "Name",
-        "Designation",
-        "Phone",
-        "Monthly Salary",
-        "Total Paid",
-        "Deductions",
-        "Joining Date",
-        "Status",
-      ],
-      rows: data.map((row) => ({
-        Code: row.code,
-        Name: row.name,
-        Designation: row.designation ?? "",
-        Phone: row.phone ?? "",
-        "Monthly Salary": formatPKR(row.salary),
-        "Total Paid": formatPKR(row.paid),
-        Deductions: formatPKR(row.deductions),
-        "Joining Date": formatDate(row.joiningDate),
-        Status: row.status,
+      title: "Worker Payroll & Payment Status Report",
+      columns: ["Worker Code", "Worker Name", "Role", "Phone", "Monthly Salary", "Status"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: 0,
+        totalCredit: 0,
+        closingBalance: 0,
+        label1: "Active Workers",
+        val1: String(data.length),
+      },
+      rows: data.map((worker) => ({
+        "Worker Code": worker.workerCode,
+        "Worker Name": worker.name,
+        Role: worker.designation ?? "Worker",
+        Phone: worker.phone ?? "—",
+        "Monthly Salary": formatPKR(worker.monthlySalary),
+        Status: worker.status,
       })),
     };
   }
 
-  const data = await db
-    .select({
-      name: bankAccounts.name,
-      bank: bankAccounts.bankName,
-      accountNumber: bankAccounts.accountNumber,
-      opening: bankAccounts.openingBalance,
-      movement: sql<string>`COALESCE(SUM(
-        CASE
-          WHEN ${transactions.type} IN ('bank_deposit', 'customer_receipt') THEN ${transactions.totalAmount}
-          WHEN ${transactions.type} IN ('bank_withdrawal', 'supplier_payment') THEN -${transactions.totalAmount}
-          ELSE 0
-        END
-      ), 0)`,
-    })
-    .from(bankAccounts)
-    .leftJoin(
-      transactions,
-      and(
-        eq(transactions.bankAccountId, bankAccounts.id),
-        eq(transactions.status, "posted"),
-      ),
-    )
-    .where(eq(bankAccounts.isActive, true))
-    .groupBy(bankAccounts.id)
-    .orderBy(asc(bankAccounts.name));
-  return {
-    title: "Bank Balance Report",
-    columns: ["Account", "Bank", "Account Number", "Opening", "Movement", "Balance"],
-    rows: data.map((row) => ({
-      Account: row.name,
-      Bank: row.bank ?? (row.name.includes("Cash") ? "Cash" : ""),
-      "Account Number": row.accountNumber ?? "",
-      Opening: formatPKR(row.opening),
-      Movement: formatPKR(row.movement),
-      Balance: formatPKR(Number(row.opening) + Number(row.movement)),
-    })),
-  };
+  if (type === "bank-balances") {
+    const data = await db
+      .select()
+      .from(bankAccounts)
+      .where(eq(bankAccounts.isActive, true))
+      .orderBy(bankAccounts.name);
+
+    let totalCashBank = 0;
+    const rows = data.map((acc) => {
+      const bal = Number(acc.openingBalance);
+      totalCashBank += bal;
+      return {
+        Account: acc.name,
+        Bank: acc.bankName ?? "Cash Account",
+        "Account #": acc.accountNumber ?? "—",
+        Type: acc.isCashAccount ? "Cash in Hand" : "Bank Account",
+        Balance: formatPKR(bal),
+      };
+    });
+
+    return {
+      title: "Bank & Cash Accounts Liquidity Report",
+      columns: ["Account", "Bank", "Account #", "Type", "Balance"],
+      summaryStats: {
+        openingBalance: 0,
+        totalDebit: 0,
+        totalCredit: 0,
+        closingBalance: totalCashBank,
+        label1: "Total Bank Liquidity",
+        val1: formatPKR(totalCashBank),
+      },
+      rows,
+    };
+  }
+
+  return { title: "Report", columns: [], rows: [] };
+}
+
+function inventoryMovementTypeEnumName(type: string) {
+  return type.replaceAll("_", " ").toUpperCase();
 }
