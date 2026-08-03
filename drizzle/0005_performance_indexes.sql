@@ -1,0 +1,3 @@
+CREATE INDEX "transactions_status_type_method_idx" ON "transactions" USING btree ("status","type","payment_method");--> statement-breakpoint
+CREATE INDEX "transactions_party_status_type_method_idx" ON "transactions" USING btree ("party_id","status","type","payment_method");--> statement-breakpoint
+CREATE INDEX "transactions_bank_status_type_idx" ON "transactions" USING btree ("bank_account_id","status","type");

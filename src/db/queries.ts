@@ -1,26 +1,17 @@
 import "server-only";
 
-import { count, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from ".";
-import { inventoryMovements, parties, products, transactions, warehouses } from "./schema";
+import { inventoryMovements, products, transactions, warehouses } from "./schema";
 
 export async function getDashboardSummary() {
-  const [[productResult], [customerResult], [supplierResult], balancesResult, healthResult] =
+  const [balancesResult, healthResult] =
     await Promise.all([
-      db
-        .select({ value: count() })
-        .from(products)
-        .where(eq(products.isActive, true)),
-      db
-        .select({ value: count() })
-        .from(parties)
-        .where(eq(parties.isCustomer, true)),
-      db
-        .select({ value: count() })
-        .from(parties)
-        .where(eq(parties.isSupplier, true)),
       db.execute(sql`
         SELECT
+          (SELECT COUNT(*) FROM products WHERE is_active) AS products,
+          (SELECT COUNT(*) FROM parties WHERE is_customer AND is_active) AS customers,
+          (SELECT COUNT(*) FROM parties WHERE is_supplier AND is_active) AS suppliers,
           COALESCE((SELECT SUM(opening_receivable) FROM parties WHERE is_active), 0)
             + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'sale' AND payment_method = 'credit'), 0)
             - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'customer_receipt'), 0)
@@ -58,6 +49,9 @@ export async function getDashboardSummary() {
     ]);
 
   const balances = balancesResult.rows[0] as {
+    products: string;
+    customers: string;
+    suppliers: string;
     receivables: string;
     payables: string;
     company_balance: string;
@@ -69,9 +63,9 @@ export async function getDashboardSummary() {
   };
 
   return {
-    products: productResult?.value ?? 0,
-    customers: customerResult?.value ?? 0,
-    suppliers: supplierResult?.value ?? 0,
+    products: Number(balances.products),
+    customers: Number(balances.customers),
+    suppliers: Number(balances.suppliers),
     receivables: Number(balances.receivables),
     payables: Number(balances.payables),
     companyBalance: Number(balances.company_balance),

@@ -50,17 +50,19 @@ export async function listParties(search = "", type = "all") {
       isSupplier: parties.isSupplier,
       receivable: sql<string>`
         ${parties.openingReceivable}
-        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'sale' AND t.payment_method = 'credit'), 0)
-        - COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'customer_receipt'), 0)
+        + COALESCE(SUM(${transactions.totalAmount}) FILTER (WHERE ${transactions.status} = 'posted' AND ${transactions.type} = 'sale' AND ${transactions.paymentMethod} = 'credit'), 0)
+        - COALESCE(SUM(${transactions.totalAmount}) FILTER (WHERE ${transactions.status} = 'posted' AND ${transactions.type} = 'customer_receipt'), 0)
       `,
       payable: sql<string>`
         ${parties.openingPayable}
-        + COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'purchase' AND t.payment_method = 'credit'), 0)
-        - COALESCE((SELECT SUM(t.total_amount) FROM transactions t WHERE t.party_id = ${parties.id} AND t.status = 'posted' AND t.type = 'supplier_payment'), 0)
+        + COALESCE(SUM(${transactions.totalAmount}) FILTER (WHERE ${transactions.status} = 'posted' AND ${transactions.type} = 'purchase' AND ${transactions.paymentMethod} = 'credit'), 0)
+        - COALESCE(SUM(${transactions.totalAmount}) FILTER (WHERE ${transactions.status} = 'posted' AND ${transactions.type} = 'supplier_payment'), 0)
       `,
     })
     .from(parties)
+    .leftJoin(transactions, eq(parties.id, transactions.partyId))
     .where(and(...conditions))
+    .groupBy(parties.id)
     .orderBy(parties.name);
 }
 
@@ -134,14 +136,12 @@ export async function listProducts(search = "") {
       isPurchasable: products.isPurchasable,
       isRawMaterial: products.isRawMaterial,
       isFinishedGood: products.isFinishedGood,
-      stock: sql<string>`COALESCE((
-        SELECT SUM(im.quantity_delta)
-        FROM inventory_movements im
-        WHERE im.product_id = ${products.id}
-      ), 0)`,
+      stock: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)`,
     })
     .from(products)
+    .leftJoin(inventoryMovements, eq(products.id, inventoryMovements.productId))
     .where(condition)
+    .groupBy(products.id)
     .orderBy(products.name);
 }
 
@@ -245,7 +245,8 @@ export async function listTransactions(search = "", type = "all", partyId = "all
     .leftJoin(products, eq(transactions.productId, products.id))
     .leftJoin(bankAccounts, eq(transactions.bankAccountId, bankAccounts.id))
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(transactions.transactionDate), desc(transactions.createdAt));
+    .orderBy(desc(transactions.transactionDate), desc(transactions.createdAt))
+    .limit(200);
 }
 
 export async function getTransactionDetail(id: string) {

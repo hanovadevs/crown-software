@@ -333,6 +333,9 @@ export const transactions = pgTable(
     index("transactions_product_idx").on(table.productId),
     index("transactions_status_type_idx").on(table.status, table.type),
     index("transactions_party_status_idx").on(table.partyId, table.status),
+    index("transactions_status_type_method_idx").on(table.status, table.type, table.paymentMethod),
+    index("transactions_party_status_type_method_idx").on(table.partyId, table.status, table.type, table.paymentMethod),
+    index("transactions_bank_status_type_idx").on(table.bankAccountId, table.status, table.type),
     check("transactions_amount_positive", sql`${table.totalAmount} > 0`),
     check(
       "transactions_quantity_nonnegative",
