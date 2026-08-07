@@ -581,9 +581,6 @@ a {
   to { opacity: 1; transform: scale(1); }
 }
 
-  min-width: 0;
-}
-
 .brand-mark {
   border-radius: 5px;
   display: block;
