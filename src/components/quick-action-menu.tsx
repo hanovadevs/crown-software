@@ -110,6 +110,7 @@ export function QuickActionMenu() {
                   key={href}
                   className="quick-action-card"
                   href={href}
+                  prefetch={true}
                   onClick={() => setIsOpen(false)}
                 >
                   <span

@@ -21,8 +21,8 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { logoutAction } from "@/app/actions/auth";
 import { BackForwardNav } from "./back-forward-nav";
 import { Brand } from "./brand";
@@ -103,10 +103,34 @@ export function AppShell({
   user: { displayName: string; role: string };
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navGroups = user.role === "inventory" ? stockManagerNavGroups : adminNavGroups;
+
+  // Background prefetch all core routes for instant tab-like page switching
+  useEffect(() => {
+    const routesToPrefetch = [
+      "/dashboard",
+      "/parties",
+      "/products",
+      "/transactions",
+      "/bills/new",
+      "/gate-pass",
+      "/reports",
+      "/workers",
+      "/stock",
+      "/stock/adjust",
+    ];
+    routesToPrefetch.forEach((route) => {
+      try {
+        router.prefetch(route);
+      } catch {
+        // Ignore prefetch error
+      }
+    });
+  }, [router]);
 
   const avatarText = user.displayName
     .split(/\s+/)
@@ -154,6 +178,7 @@ export function AppShell({
                   <Link
                     key={href}
                     href={href}
+                    prefetch={true}
                     className={`sidebar-nav-link ${active ? "active" : ""}`}
                     onClick={() => setMobileMenuOpen(false)}
                     title={sidebarCollapsed ? label : undefined}
@@ -241,6 +266,7 @@ export function AppShell({
         <nav className="mobile-bottom-dock" aria-label="Mobile navigation">
           <Link
             href="/dashboard"
+            prefetch={true}
             className={`bottom-dock-item ${pathname === "/dashboard" ? "active" : ""}`}
           >
             <Home size={20} />
@@ -248,6 +274,7 @@ export function AppShell({
           </Link>
           <Link
             href="/parties"
+            prefetch={true}
             className={`bottom-dock-item ${pathname.startsWith("/parties") ? "active" : ""}`}
           >
             <Users size={20} />
@@ -255,6 +282,7 @@ export function AppShell({
           </Link>
           <Link
             href="/bills/new"
+            prefetch={true}
             className={`bottom-dock-item highlight ${pathname === "/bills/new" ? "active" : ""}`}
           >
             <ReceiptText size={22} />
@@ -262,6 +290,7 @@ export function AppShell({
           </Link>
           <Link
             href="/gate-pass"
+            prefetch={true}
             className={`bottom-dock-item ${pathname.startsWith("/gate-pass") ? "active" : ""}`}
           >
             <ClipboardCheck size={20} />
