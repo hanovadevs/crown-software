@@ -2091,6 +2091,27 @@ legend {
   .billing-layout {
     grid-template-columns: 1fr;
   }
+
+  .billing-sidebar {
+    position: static;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .billing-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .direction-toggle {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .direction-btn {
+    font-size: 0.85rem;
+    height: 42px;
+  }
 }
 
 .billing-main {
@@ -3025,11 +3046,6 @@ legend {
     grid-template-columns: 1fr;
   }
 
-  .billing-sidebar {
-    grid-template-columns: 1fr 1fr;
-    position: static;
-  }
-
   .bill-item-grid {
     grid-template-columns: minmax(240px, 2fr) 1fr 1fr;
   }
@@ -3163,7 +3179,11 @@ legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .billing-sidebar,
+  .billing-sidebar {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
   .bill-item-grid {
     grid-template-columns: 1fr;
   }
