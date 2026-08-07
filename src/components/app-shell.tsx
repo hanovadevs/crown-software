@@ -128,7 +128,7 @@ export function AppShell({
       <aside className={`app-sidebar ${mobileMenuOpen ? "mobile-open" : ""}`}>
         <div className="sidebar-header">
           <Link href="/dashboard" className="sidebar-brand-link">
-            <Brand />
+            <Brand compact={sidebarCollapsed} />
           </Link>
           <button
             className="sidebar-toggle-btn"

@@ -109,11 +109,11 @@ a {
 }
 
 .sidebar-header {
-  height: 64px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -596,15 +596,20 @@ a {
 
 .brand-name {
   display: block;
-  font-size: 18px;
-  font-weight: 750;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--foreground);
 }
 
 .brand-subtitle {
   color: var(--muted);
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1.2;
+  margin-top: 2px;
 }
 
 .topnav {
