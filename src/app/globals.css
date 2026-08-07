@@ -22,6 +22,27 @@
   --radius: 14px;
 }
 
+[data-theme="light"] {
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --surface-strong: #f1f5f9;
+  --surface-soft: #e2e8f0;
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --muted-strong: #334155;
+  --primary: #4338ca;
+  --primary-hover: #3730a3;
+  --primary-glow: rgba(67, 56, 202, 0.15);
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #e11d48;
+  --cyan: #0891b2;
+  --pink: #db2777;
+  --purple: #7c3aed;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -87,6 +108,10 @@ a {
   background: radial-gradient(circle at 50% 0%, #151828 0%, #090a0f 70%);
 }
 
+[data-theme="light"] .app-container {
+  background: radial-gradient(circle at 50% 0%, #ffffff 0%, #f1f5f9 70%);
+}
+
 /* Sidebar Navigation Deck */
 .app-sidebar {
   width: 250px;
@@ -102,6 +127,10 @@ a {
   left: 0;
   z-index: 50;
   transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s ease;
+}
+
+[data-theme="light"] .app-sidebar {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .sidebar-collapsed .app-sidebar {
@@ -279,6 +308,10 @@ a {
   position: sticky;
   top: 0;
   z-index: 40;
+}
+
+[data-theme="light"] .app-header {
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .header-left {
@@ -493,6 +526,10 @@ a {
   border-top: 1px solid var(--border);
   z-index: 45;
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+[data-theme="light"] .mobile-bottom-dock {
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .bottom-dock-item {
@@ -802,6 +839,10 @@ a {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+[data-theme="light"] .card {
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
 }
 
 .stats-grid {

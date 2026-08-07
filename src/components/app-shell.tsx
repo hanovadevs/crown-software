@@ -27,6 +27,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { Brand } from "./brand";
 import { LiveRefresh } from "./live-refresh";
 import { QuickActionMenu } from "./quick-action-menu";
+import { ThemeToggle } from "./theme-toggle";
 
 type NavGroup = {
   title: string;
@@ -212,6 +213,8 @@ export function AppShell({
 
           <div className="header-right">
             <QuickActionMenu />
+
+            <ThemeToggle />
 
             <Link className="icon-button header-btn" href="/search" aria-label="Search">
               <Search size={20} />
