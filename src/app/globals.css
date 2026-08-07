@@ -4165,3 +4165,52 @@ legend {
   margin-top: 24px;
 }
 
+/* ───── Print & PDF Export Styles ───── */
+@media print {
+  /* Completely hide all app navigation bars, sidebars, bottom docks, and action buttons */
+  .app-sidebar,
+  .app-header,
+  .mobile-bottom-dock,
+  .mobile-drawer-backdrop,
+  .no-print,
+  .print-hidden,
+  .invoice-actions,
+  .report-print-actions,
+  .quick-hub-btn,
+  .theme-toggle-btn,
+  .back-forward-nav,
+  .mobile-menu-toggle,
+  .filter-bar {
+    display: none !important;
+  }
+
+  /* Reset main page containers to fill paper width cleanly */
+  body,
+  html,
+  .app-container,
+  .app-main,
+  .app-content,
+  .page {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-shadow: none !important;
+  }
+
+  /* Clean print sheets (Ledgers, Invoices, Gate Passes, Reports) */
+  .printable-report,
+  .invoice-sheet,
+  .gate-pass-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
