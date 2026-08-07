@@ -1,9 +1,10 @@
 import "server-only";
 
-import { desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from ".";
 import {
   appSettings,
+  gatePasses,
   notifications,
   parties,
   products,
@@ -62,46 +63,6 @@ export async function getWorkerPaymentOptions() {
 
 export async function listNotifications(userId: string) {
   try {
-    const [dbNotes, lowStockProducts, gatePassAlerts, partyBalances] = await Promise.all([
-      db
-        .select()
-        .from(notifications)
-        .where(or(eq(notifications.userId, userId), sql`${notifications.userId} IS NULL`))
-        .orderBy(desc(notifications.createdAt))
-        .limit(50),
-      db.execute(sql`
-        SELECT p.id, p.name, p.sku, p.unit, p.reorder_level, COALESCE(SUM(im.quantity_delta), 0) AS current_stock
-        FROM products p
-        LEFT JOIN inventory_movements im ON im.product_id = p.id
-        WHERE p.is_active
-        GROUP BY p.id
-        HAVING COALESCE(SUM(im.quantity_delta), 0) <= p.reorder_level
-        LIMIT 20
-      `),
-      db.execute(sql`
-        SELECT id, gate_pass_number, direction, party_id, vehicle_number, driver_name, expected_return_date, created_at
-        FROM gate_passes
-        WHERE is_returnable = true AND status IN ('issued', 'draft')
-        ORDER BY created_at DESC
-        LIMIT 10
-      `),
-      db.execute(sql`
-        SELECT p.id, p.name, p.phone,
-          ${parties.openingReceivable}
-            + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'sale'), 0)
-            - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'customer_receipt'), 0) AS receivable
-        FROM parties p
-        LEFT JOIN transactions t ON t.party_id = p.id
-        WHERE p.is_active AND p.is_customer
-        GROUP BY p.id
-        HAVING (${parties.openingReceivable}
-          + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'sale'), 0)
-          - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'customer_receipt'), 0)) > 5000
-        ORDER BY receivable DESC
-        LIMIT 10
-      `),
-    ]);
-
     const generatedAlerts: Array<{
       id: string;
       title: string;
@@ -112,59 +73,128 @@ export async function listNotifications(userId: string) {
       createdAt: Date;
     }> = [];
 
-    // Low stock alerts
-    for (const row of lowStockProducts.rows as Array<{ id: string; name: string; sku: string; unit: string; reorder_level: string; current_stock: string }>) {
-      const stock = Number(row.current_stock);
-      const min = Number(row.reorder_level);
-      generatedAlerts.push({
-        id: `stock-${row.id}`,
-        title: `Low Stock Alert: ${row.name}`,
-        message: `Current stock level is ${stock} ${row.unit} (reorder threshold: ${min} ${row.unit}). Consider restocking immediately.`,
-        type: "stock",
-        link: "/stock/adjust",
-        severity: stock <= 0 ? "danger" : "warning",
-        createdAt: new Date(),
-      });
+    // 1. Fetch Low Stock Products with Drizzle
+    try {
+      const activeProducts = await db
+        .select({
+          id: products.id,
+          name: products.name,
+          sku: products.sku,
+          unit: products.unit,
+          reorderLevel: products.reorderLevel,
+          currentStock: sql<string>`COALESCE((SELECT SUM(quantity_delta) FROM inventory_movements WHERE product_id = ${products.id}), 0)`,
+        })
+        .from(products)
+        .where(eq(products.isActive, true))
+        .limit(100);
+
+      for (const prod of activeProducts) {
+        const stock = Number(prod.currentStock || 0);
+        const minThreshold = Number(prod.reorderLevel ?? 10);
+        if (stock <= minThreshold) {
+          generatedAlerts.push({
+            id: `stock-${prod.id}`,
+            title: `Low Stock Alert: ${prod.name}`,
+            message: `Current stock level is ${stock} ${prod.unit} (reorder threshold: ${minThreshold} ${prod.unit}). Consider restocking immediately.`,
+            type: "stock",
+            link: "/stock/adjust",
+            severity: stock <= 0 ? "danger" : "warning",
+            createdAt: new Date(),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Low stock notification fetch warning:", e);
     }
 
-    // Returnable Gate Pass Alerts
-    for (const gp of gatePassAlerts.rows as Array<{ id: string; gate_pass_number: string; direction: string; vehicle_number: string; driver_name: string; created_at: Date }>) {
-      generatedAlerts.push({
-        id: `gp-${gp.id}`,
-        title: `Returnable Gate Pass: ${gp.gate_pass_number}`,
-        message: `Material dispatch ${gp.gate_pass_number} (${gp.driver_name || "Driver"} - ${gp.vehicle_number || "Vehicle"}) is marked returnable and awaiting return.`,
-        type: "gate_pass",
-        link: `/gate-pass/${gp.id}`,
-        severity: "info",
-        createdAt: new Date(gp.created_at),
-      });
+    // 2. Fetch Returnable Gate Passes with Drizzle inArray
+    try {
+      const gpAlerts = await db
+        .select({
+          id: gatePasses.id,
+          number: gatePasses.gatePassNumber,
+          direction: gatePasses.direction,
+          vehicleNumber: gatePasses.vehicleNumber,
+          driverName: gatePasses.driverName,
+          createdAt: gatePasses.createdAt,
+        })
+        .from(gatePasses)
+        .where(and(eq(gatePasses.isReturnable, true), inArray(gatePasses.status, ["issued", "draft"])))
+        .orderBy(desc(gatePasses.createdAt))
+        .limit(10);
+
+      for (const gp of gpAlerts) {
+        generatedAlerts.push({
+          id: `gp-${gp.id}`,
+          title: `Returnable Gate Pass: ${gp.number}`,
+          message: `Material dispatch ${gp.number} (${gp.driverName || "Driver"} - ${gp.vehicleNumber || "Vehicle"}) is marked returnable and awaiting return.`,
+          type: "gate_pass",
+          link: `/gate-pass/${gp.id}`,
+          severity: "info",
+          createdAt: new Date(gp.createdAt),
+        });
+      }
+    } catch (e) {
+      console.warn("Gate pass notification fetch warning:", e);
     }
 
-    // Pending Receivable Reminders
-    for (const p of partyBalances.rows as Array<{ id: string; name: string; phone: string; receivable: string }>) {
-      const bal = Number(p.receivable);
-      generatedAlerts.push({
-        id: `party-${p.id}`,
-        title: `Outstanding Receivable: ${p.name}`,
-        message: `Pending customer ledger balance of PKR ${bal.toLocaleString()} requires collection/follow up.`,
-        type: "payment",
-        link: `/parties`,
-        severity: bal > 100000 ? "danger" : "warning",
-        createdAt: new Date(),
-      });
+    // 3. Fetch Customer Receivables with Drizzle
+    try {
+      const customerParties = await db
+        .select({
+          id: parties.id,
+          name: parties.name,
+          phone: parties.phone,
+          receivable: sql<string>`
+            ${parties.openingReceivable}
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND status = 'posted' AND type = 'sale'), 0)
+            - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND status = 'posted' AND type = 'customer_receipt'), 0)
+          `,
+        })
+        .from(parties)
+        .where(and(eq(parties.isActive, true), eq(parties.isCustomer, true)))
+        .limit(50);
+
+      for (const cp of customerParties) {
+        const bal = Number(cp.receivable || 0);
+        if (bal > 5000) {
+          generatedAlerts.push({
+            id: `party-${cp.id}`,
+            title: `Outstanding Receivable: ${cp.name}`,
+            message: `Pending customer ledger balance of PKR ${bal.toLocaleString()} requires collection/follow up.`,
+            type: "payment",
+            link: "/parties",
+            severity: bal > 100000 ? "danger" : "warning",
+            createdAt: new Date(),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Receivable notification fetch warning:", e);
     }
 
-    // Merge DB notes
-    for (const note of dbNotes) {
-      generatedAlerts.push({
-        id: note.id,
-        title: note.title,
-        message: note.message,
-        type: "system",
-        link: "/dashboard",
-        severity: "info",
-        createdAt: note.createdAt,
-      });
+    // 4. Fetch Stored DB Notifications
+    try {
+      const dbNotes = await db
+        .select()
+        .from(notifications)
+        .where(or(eq(notifications.userId, userId), sql`${notifications.userId} IS NULL`))
+        .orderBy(desc(notifications.createdAt))
+        .limit(50);
+
+      for (const note of dbNotes) {
+        generatedAlerts.push({
+          id: note.id,
+          title: note.title,
+          message: note.message,
+          type: "system",
+          link: "/dashboard",
+          severity: "info",
+          createdAt: note.createdAt,
+        });
+      }
+    } catch (e) {
+      console.warn("DB notifications fetch warning:", e);
     }
 
     return generatedAlerts;
