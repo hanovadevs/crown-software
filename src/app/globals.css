@@ -115,9 +115,7 @@ a {
 /* Sidebar Navigation Deck */
 .app-sidebar {
   width: 250px;
-  background: rgba(18, 20, 29, 0.85);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -130,7 +128,8 @@ a {
 }
 
 [data-theme="light"] .app-sidebar {
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
+  border-right-color: #e2e8f0;
 }
 
 .sidebar-collapsed .app-sidebar {
@@ -297,9 +296,7 @@ a {
 /* Header Topbar */
 .app-header {
   height: 64px;
-  background: rgba(18, 20, 29, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -308,10 +305,13 @@ a {
   position: sticky;
   top: 0;
   z-index: 40;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 [data-theme="light"] .app-header {
-  background: rgba(255, 255, 255, 0.88);
+  background: #ffffff;
+  border-bottom-color: #e2e8f0;
 }
 
 .header-left {

@@ -122,8 +122,8 @@ export function BillForm({
 
   return (
     <form action={action} className="billing-layout">
-      <input name="itemsJson" type="hidden" value={serializedItems} readOnly />
       <div className="billing-main">
+        <input name="itemsJson" type="hidden" value={serializedItems} readOnly />
         <section className="card detail-form">
           <div className="form-section-heading">
             <FileText size={24} />
