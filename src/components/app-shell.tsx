@@ -196,11 +196,11 @@ export function AppShell({
 
         <div className="sidebar-footer">
           <div className="sidebar-user-card">
-            <div className="avatar">{avatarText || "CA"}</div>
+            <div className="sidebar-user-avatar">{avatarText || "CA"}</div>
             {!sidebarCollapsed && (
               <div className="sidebar-user-info">
-                <strong>{user.displayName}</strong>
-                <small>{user.role}</small>
+                <strong className="sidebar-user-name">{user.displayName}</strong>
+                <span className="sidebar-role-badge">{user.role}</span>
               </div>
             )}
           </div>
@@ -211,7 +211,7 @@ export function AppShell({
               title="Sign out"
               aria-label="Sign out"
             >
-              <LogOut size={18} />
+              <LogOut size={17} />
             </button>
           </form>
         </div>
