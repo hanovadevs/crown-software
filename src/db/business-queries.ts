@@ -347,11 +347,16 @@ export async function listStockMovements(limit = 100) {
 }
 
 export async function getReportFilterOptions() {
-  const [partyOptions, productOptions, workerOptions, warehouseOptions] = await Promise.all([
-    listParties(),
-    db.select({ id: products.id, name: products.name, sku: products.sku }).from(products).where(eq(products.isActive, true)).orderBy(products.name),
-    db.select({ id: workers.id, name: workers.name, code: workers.workerCode, phone: workers.phone }).from(workers).orderBy(workers.name),
-    db.select({ id: warehouses.id, name: warehouses.name, code: warehouses.code }).from(warehouses).where(eq(warehouses.isActive, true)).orderBy(warehouses.name),
-  ]);
-  return { parties: partyOptions, products: productOptions, workers: workerOptions, warehouses: warehouseOptions };
+  try {
+    const [partyOptions, productOptions, workerOptions, warehouseOptions] = await Promise.all([
+      listParties(),
+      db.select({ id: products.id, name: products.name, sku: products.sku }).from(products).where(eq(products.isActive, true)).orderBy(products.name),
+      db.select({ id: workers.id, name: workers.name, code: workers.workerCode, phone: workers.phone }).from(workers).orderBy(workers.name),
+      db.select({ id: warehouses.id, name: warehouses.name, code: warehouses.code }).from(warehouses).where(eq(warehouses.isActive, true)).orderBy(warehouses.name),
+    ]);
+    return { parties: partyOptions, products: productOptions, workers: workerOptions, warehouses: warehouseOptions };
+  } catch (error) {
+    console.error("getReportFilterOptions error:", error);
+    return { parties: [], products: [], workers: [], warehouses: [] };
+  }
 }

@@ -45,33 +45,38 @@ export async function createSession(
 }
 
 export const getSession = cache(async function getSession() {
-  const token = (await cookies()).get(cookieName())?.value;
-  if (!token) return null;
+  try {
+    const token = (await cookies()).get(cookieName())?.value;
+    if (!token) return null;
 
-  const [session] = await db
-    .select({
-      sessionId: sessions.id,
-      expiresAt: sessions.expiresAt,
-      user: {
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        role: users.role,
-        mustChangePassword: users.mustChangePassword,
-      },
-    })
-    .from(sessions)
-    .innerJoin(users, eq(sessions.userId, users.id))
-    .where(
-      and(
-        eq(sessions.tokenHash, tokenHash(token)),
-        gt(sessions.expiresAt, new Date()),
-        eq(users.isActive, true),
-      ),
-    )
-    .limit(1);
+    const [session] = await db
+      .select({
+        sessionId: sessions.id,
+        expiresAt: sessions.expiresAt,
+        user: {
+          id: users.id,
+          username: users.username,
+          displayName: users.displayName,
+          role: users.role,
+          mustChangePassword: users.mustChangePassword,
+        },
+      })
+      .from(sessions)
+      .innerJoin(users, eq(sessions.userId, users.id))
+      .where(
+        and(
+          eq(sessions.tokenHash, tokenHash(token)),
+          gt(sessions.expiresAt, new Date()),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
 
-  return session ?? null;
+    return session ?? null;
+  } catch (error) {
+    console.error("Auth getSession query error:", error);
+    return null;
+  }
 });
 
 export async function requireUser() {
