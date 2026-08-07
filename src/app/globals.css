@@ -1932,6 +1932,50 @@ legend {
   min-width: 320px;
 }
 
+.direction-toggle {
+  display: flex;
+  gap: 12px;
+  background: var(--surface-soft);
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.direction-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.direction-btn:hover {
+  color: var(--foreground);
+}
+
+.direction-btn.active.inward {
+  background: #059669;
+  color: #ffffff;
+  border-color: #059669;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+}
+
+.direction-btn.active.outward {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #d97706;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+}
+
 .transaction-type-grid {
   display: grid;
   gap: 10px;
