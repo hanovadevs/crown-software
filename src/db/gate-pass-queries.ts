@@ -46,68 +46,76 @@ export async function listGatePasses(search = "", direction = "all") {
     );
   }
 
-  return db
-    .select({
-      id: gatePasses.id,
-      number: gatePasses.gatePassNumber,
-      direction: gatePasses.direction,
-      status: gatePasses.status,
-      partyName: parties.name,
-      vehicleNumber: gatePasses.vehicleNumber,
-      driverName: gatePasses.driverName,
-      date: gatePasses.gatePassDate,
-      isReturnable: gatePasses.isReturnable,
-      itemCount: sql<string>`(SELECT COUNT(*) FROM gate_pass_items gpi WHERE gpi.gate_pass_id = ${gatePasses.id})`,
-    })
-    .from(gatePasses)
-    .leftJoin(parties, eq(gatePasses.partyId, parties.id))
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(gatePasses.gatePassDate), desc(gatePasses.createdAt))
-    .limit(200);
+  try {
+    return await db
+      .select({
+        id: gatePasses.id,
+        number: gatePasses.gatePassNumber,
+        direction: gatePasses.direction,
+        status: gatePasses.status,
+        partyName: parties.name,
+        vehicleNumber: gatePasses.vehicleNumber,
+        driverName: gatePasses.driverName,
+        date: gatePasses.gatePassDate,
+        isReturnable: gatePasses.isReturnable,
+        itemCount: sql<string>`(SELECT COUNT(*) FROM gate_pass_items gpi WHERE gpi.gate_pass_id = ${gatePasses.id})`,
+      })
+      .from(gatePasses)
+      .leftJoin(parties, eq(gatePasses.partyId, parties.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(gatePasses.gatePassDate), desc(gatePasses.createdAt))
+      .limit(200);
+  } catch {
+    return [];
+  }
 }
 
 export async function getGatePass(id: string) {
-  const [gatePass] = await db
-    .select({
-      id: gatePasses.id,
-      number: gatePasses.gatePassNumber,
-      direction: gatePasses.direction,
-      status: gatePasses.status,
-      partyName: parties.name,
-      partyPhone: parties.phone,
-      partyAddress: parties.address,
-      vehicleNumber: gatePasses.vehicleNumber,
-      driverName: gatePasses.driverName,
-      driverPhone: gatePasses.driverPhone,
-      date: gatePasses.gatePassDate,
-      remarks: gatePasses.remarks,
-      isReturnable: gatePasses.isReturnable,
-      expectedReturnDate: gatePasses.expectedReturnDate,
-      authorizedBy: gatePasses.authorizedBy,
-      receivedBy: gatePasses.receivedBy,
-      gateKeeperName: gatePasses.gateKeeperName,
-      createdAt: gatePasses.createdAt,
-    })
-    .from(gatePasses)
-    .leftJoin(parties, eq(gatePasses.partyId, parties.id))
-    .where(eq(gatePasses.id, id))
-    .limit(1);
+  try {
+    const [gatePass] = await db
+      .select({
+        id: gatePasses.id,
+        number: gatePasses.gatePassNumber,
+        direction: gatePasses.direction,
+        status: gatePasses.status,
+        partyName: parties.name,
+        partyPhone: parties.phone,
+        partyAddress: parties.address,
+        vehicleNumber: gatePasses.vehicleNumber,
+        driverName: gatePasses.driverName,
+        driverPhone: gatePasses.driverPhone,
+        date: gatePasses.gatePassDate,
+        remarks: gatePasses.remarks,
+        isReturnable: gatePasses.isReturnable,
+        expectedReturnDate: gatePasses.expectedReturnDate,
+        authorizedBy: gatePasses.authorizedBy,
+        receivedBy: gatePasses.receivedBy,
+        gateKeeperName: gatePasses.gateKeeperName,
+        createdAt: gatePasses.createdAt,
+      })
+      .from(gatePasses)
+      .leftJoin(parties, eq(gatePasses.partyId, parties.id))
+      .where(eq(gatePasses.id, id))
+      .limit(1);
 
-  if (!gatePass) return null;
+    if (!gatePass) return null;
 
-  const items = await db
-    .select({
-      id: gatePassItems.id,
-      description: gatePassItems.description,
-      quantity: gatePassItems.quantity,
-      unit: gatePassItems.unit,
-      remarks: gatePassItems.remarks,
-      productName: products.name,
-      productSku: products.sku,
-    })
-    .from(gatePassItems)
-    .leftJoin(products, eq(gatePassItems.productId, products.id))
-    .where(eq(gatePassItems.gatePassId, id));
+    const items = await db
+      .select({
+        id: gatePassItems.id,
+        description: gatePassItems.description,
+        quantity: gatePassItems.quantity,
+        unit: gatePassItems.unit,
+        remarks: gatePassItems.remarks,
+        productName: products.name,
+        productSku: products.sku,
+      })
+      .from(gatePassItems)
+      .leftJoin(products, eq(gatePassItems.productId, products.id))
+      .where(eq(gatePassItems.gatePassId, id));
 
-  return { gatePass, items };
+    return { gatePass, items };
+  } catch {
+    return null;
+  }
 }
