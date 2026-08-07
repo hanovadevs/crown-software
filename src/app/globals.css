@@ -4166,6 +4166,11 @@ legend {
 }
 
 /* ───── Print & PDF Export Styles ───── */
+@page {
+  size: auto;
+  margin: 12mm 12mm 12mm 12mm;
+}
+
 @media print {
   /* Completely hide all app navigation bars, sidebars, bottom docks, and action buttons */
   .app-sidebar,
@@ -4198,6 +4203,9 @@ legend {
     max-width: 100% !important;
     width: 100% !important;
     box-shadow: none !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
   }
 
   /* Clean print sheets (Ledgers, Invoices, Gate Passes, Reports) */
@@ -4209,8 +4217,27 @@ legend {
     padding: 0 !important;
     margin: 0 auto !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
     background: #ffffff !important;
     color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent table rows and total summary lines from getting sliced in half at page breaks */
+  table {
+    page-break-inside: auto;
+  }
+
+  tr,
+  td,
+  th,
+  .report-summary,
+  .invoice-totals,
+  .gp-signatures,
+  .gp-meta-grid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
 

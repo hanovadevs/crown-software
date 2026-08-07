@@ -106,7 +106,7 @@ async function main() {
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+      const item = items[i] as { type: string; amount: string; date: string; desc: string; method: string; qty?: string; rate?: string };
       const seqKey = item.type === "sale" ? "tx-sales" : "tx-receipt";
       const prefix = item.type === "sale" ? "SL" : "RC";
       const txNumber = await nextDocumentNumber(tx, seqKey, prefix, new Date(item.date));
