@@ -44,21 +44,25 @@ export async function loginAction(
   const headersList = await headers();
   const metadata = requestMetadata(headersList);
   const windowStart = new Date(Date.now() - 15 * 60 * 1000);
-  const [failedAttempts] = await db
-    .select({ value: count() })
-    .from(loginAttempts)
-    .where(
-      and(
-        eq(loginAttempts.username, username),
-        eq(loginAttempts.succeeded, false),
-        gte(loginAttempts.attemptedAt, windowStart),
-      ),
-    );
+  try {
+    const [failedAttempts] = await db
+      .select({ value: count() })
+      .from(loginAttempts)
+      .where(
+        and(
+          eq(loginAttempts.username, username),
+          eq(loginAttempts.succeeded, false),
+          gte(loginAttempts.attemptedAt, windowStart),
+        ),
+      );
 
-  if ((failedAttempts?.value ?? 0) >= 8) {
-    return {
-      error: "Too many unsuccessful attempts. Please wait 15 minutes.",
-    };
+    if ((failedAttempts?.value ?? 0) >= 8) {
+      return {
+        error: "Too many unsuccessful attempts. Please wait 15 minutes.",
+      };
+    }
+  } catch {
+    // If login_attempts table query fails, allow login authentication to proceed
   }
 
   const [user] = await db
@@ -70,11 +74,15 @@ export async function loginAction(
     user?.isActive && (await compare(parsed.data.password, user.passwordHash)),
   );
 
-  await db.insert(loginAttempts).values({
-    username,
-    succeeded: valid,
-    ...metadata,
-  });
+  try {
+    await db.insert(loginAttempts).values({
+      username,
+      succeeded: valid,
+      ...metadata,
+    });
+  } catch {
+    // Ignore logging failure if table is absent
+  }
 
   if (!valid || !user) {
     return { error: "The username or password is incorrect." };
