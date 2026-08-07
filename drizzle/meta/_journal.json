@@ -43,6 +43,13 @@
       "when": 1785759403604,
       "tag": "0005_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786100792449,
+      "tag": "0006_gate_pass_tables",
+      "breakpoints": true
     }
   ]
 }

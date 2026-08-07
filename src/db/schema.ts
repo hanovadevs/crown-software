@@ -95,6 +95,16 @@ export const workOrderStatusEnum = pgEnum("work_order_status", [
   "completed",
   "cancelled",
 ]);
+export const gatePassDirectionEnum = pgEnum("gate_pass_direction", [
+  "inward",
+  "outward",
+]);
+export const gatePassStatusEnum = pgEnum("gate_pass_status", [
+  "draft",
+  "issued",
+  "received",
+  "cancelled",
+]);
 export const auditActionEnum = pgEnum("audit_action", [
   "create",
   "update",
@@ -764,8 +774,62 @@ export const auditLogs = pgTable(
   ],
 );
 
+export const gatePasses = pgTable(
+  "gate_passes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gatePassNumber: varchar("gate_pass_number", { length: 64 }).notNull(),
+    direction: gatePassDirectionEnum("direction").notNull(),
+    status: gatePassStatusEnum("status").notNull().default("issued"),
+    partyId: uuid("party_id").references(() => parties.id, {
+      onDelete: "restrict",
+    }),
+    vehicleNumber: varchar("vehicle_number", { length: 40 }),
+    driverName: varchar("driver_name", { length: 160 }),
+    driverPhone: varchar("driver_phone", { length: 30 }),
+    gatePassDate: date("gate_pass_date").notNull(),
+    remarks: text("remarks"),
+    isReturnable: boolean("is_returnable").notNull().default(false),
+    expectedReturnDate: date("expected_return_date"),
+    authorizedBy: varchar("authorized_by", { length: 160 }),
+    receivedBy: varchar("received_by", { length: 160 }),
+    gateKeeperName: varchar("gate_keeper_name", { length: 160 }),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("gate_passes_number_unique").on(table.gatePassNumber),
+    index("gate_passes_date_idx").on(table.gatePassDate),
+    index("gate_passes_direction_idx").on(table.direction),
+    index("gate_passes_party_idx").on(table.partyId),
+  ],
+);
+
+export const gatePassItems = pgTable(
+  "gate_pass_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gatePassId: uuid("gate_pass_id")
+      .notNull()
+      .references(() => gatePasses.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, {
+      onDelete: "restrict",
+    }),
+    description: varchar("description", { length: 300 }).notNull(),
+    quantity: numeric("quantity", { precision: 18, scale: 3 }).notNull(),
+    unit: varchar("unit", { length: 30 }).notNull().default("pcs"),
+    remarks: text("remarks"),
+  },
+  (table) => [
+    index("gate_pass_items_pass_idx").on(table.gatePassId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Party = typeof parties.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Bill = typeof bills.$inferSelect;
+export type GatePass = typeof gatePasses.$inferSelect;

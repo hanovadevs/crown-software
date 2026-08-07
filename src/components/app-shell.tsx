@@ -3,6 +3,7 @@
 import {
   Bell,
   Boxes,
+  ClipboardCheck,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -27,6 +28,7 @@ const links = [
   { href: "/products", label: "Products", icon: Package },
   { href: "/transactions", label: "Transactions", icon: Boxes },
   { href: "/bills/new", label: "Generate Bill", icon: ReceiptText },
+  { href: "/gate-pass", label: "Gate Pass", icon: ClipboardCheck },
   { href: "/reports", label: "Reports", icon: FileText },
 ];
 
@@ -35,6 +37,7 @@ const stockManagerLinks = [
   { href: "/products", label: "Products", icon: Package },
   { href: "/stock", label: "Stock Levels", icon: Boxes },
   { href: "/stock/adjust", label: "Adjust Stock", icon: Package },
+  { href: "/gate-pass", label: "Gate Pass", icon: ClipboardCheck },
   { href: "/reports", label: "Inventory Reports", icon: FileText },
 ];
 
