@@ -389,6 +389,22 @@ a {
   transition: all 0.2s ease;
 }
 
+.relative-btn {
+  position: relative;
+}
+
+.notification-badge-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 9px;
+  height: 9px;
+  background: #ef3942;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 8px rgba(239, 57, 66, 0.7);
+}
+
 .header-btn:hover {
   background: var(--surface-strong);
   color: var(--foreground);

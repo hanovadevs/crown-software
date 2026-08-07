@@ -61,14 +61,117 @@ export async function getWorkerPaymentOptions() {
 }
 
 export async function listNotifications(userId: string) {
-  return db
-    .select()
-    .from(notifications)
-    .where(
-      or(eq(notifications.userId, userId), sql`${notifications.userId} IS NULL`),
-    )
-    .orderBy(desc(notifications.createdAt))
-    .limit(100);
+  try {
+    const [dbNotes, lowStockProducts, gatePassAlerts, partyBalances] = await Promise.all([
+      db
+        .select()
+        .from(notifications)
+        .where(or(eq(notifications.userId, userId), sql`${notifications.userId} IS NULL`))
+        .orderBy(desc(notifications.createdAt))
+        .limit(50),
+      db.execute(sql`
+        SELECT p.id, p.name, p.sku, p.unit, p.reorder_level, COALESCE(SUM(im.quantity_delta), 0) AS current_stock
+        FROM products p
+        LEFT JOIN inventory_movements im ON im.product_id = p.id
+        WHERE p.is_active
+        GROUP BY p.id
+        HAVING COALESCE(SUM(im.quantity_delta), 0) <= p.reorder_level
+        LIMIT 20
+      `),
+      db.execute(sql`
+        SELECT id, gate_pass_number, direction, party_id, vehicle_number, driver_name, expected_return_date, created_at
+        FROM gate_passes
+        WHERE is_returnable = true AND status IN ('issued', 'draft')
+        ORDER BY created_at DESC
+        LIMIT 10
+      `),
+      db.execute(sql`
+        SELECT p.id, p.name, p.phone,
+          ${parties.openingReceivable}
+            + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'sale'), 0)
+            - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'customer_receipt'), 0) AS receivable
+        FROM parties p
+        LEFT JOIN transactions t ON t.party_id = p.id
+        WHERE p.is_active AND p.is_customer
+        GROUP BY p.id
+        HAVING (${parties.openingReceivable}
+          + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'sale'), 0)
+          - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND t.type = 'customer_receipt'), 0)) > 5000
+        ORDER BY receivable DESC
+        LIMIT 10
+      `),
+    ]);
+
+    const generatedAlerts: Array<{
+      id: string;
+      title: string;
+      message: string;
+      type: "stock" | "gate_pass" | "payment" | "system";
+      link: string;
+      severity: "danger" | "warning" | "info";
+      createdAt: Date;
+    }> = [];
+
+    // Low stock alerts
+    for (const row of lowStockProducts.rows as Array<{ id: string; name: string; sku: string; unit: string; reorder_level: string; current_stock: string }>) {
+      const stock = Number(row.current_stock);
+      const min = Number(row.reorder_level);
+      generatedAlerts.push({
+        id: `stock-${row.id}`,
+        title: `Low Stock Alert: ${row.name}`,
+        message: `Current stock level is ${stock} ${row.unit} (reorder threshold: ${min} ${row.unit}). Consider restocking immediately.`,
+        type: "stock",
+        link: "/stock/adjust",
+        severity: stock <= 0 ? "danger" : "warning",
+        createdAt: new Date(),
+      });
+    }
+
+    // Returnable Gate Pass Alerts
+    for (const gp of gatePassAlerts.rows as Array<{ id: string; gate_pass_number: string; direction: string; vehicle_number: string; driver_name: string; created_at: Date }>) {
+      generatedAlerts.push({
+        id: `gp-${gp.id}`,
+        title: `Returnable Gate Pass: ${gp.gate_pass_number}`,
+        message: `Material dispatch ${gp.gate_pass_number} (${gp.driver_name || "Driver"} - ${gp.vehicle_number || "Vehicle"}) is marked returnable and awaiting return.`,
+        type: "gate_pass",
+        link: `/gate-pass/${gp.id}`,
+        severity: "info",
+        createdAt: new Date(gp.created_at),
+      });
+    }
+
+    // Pending Receivable Reminders
+    for (const p of partyBalances.rows as Array<{ id: string; name: string; phone: string; receivable: string }>) {
+      const bal = Number(p.receivable);
+      generatedAlerts.push({
+        id: `party-${p.id}`,
+        title: `Outstanding Receivable: ${p.name}`,
+        message: `Pending customer ledger balance of PKR ${bal.toLocaleString()} requires collection/follow up.`,
+        type: "payment",
+        link: `/parties`,
+        severity: bal > 100000 ? "danger" : "warning",
+        createdAt: new Date(),
+      });
+    }
+
+    // Merge DB notes
+    for (const note of dbNotes) {
+      generatedAlerts.push({
+        id: note.id,
+        title: note.title,
+        message: note.message,
+        type: "system",
+        link: "/dashboard",
+        severity: "info",
+        createdAt: note.createdAt,
+      });
+    }
+
+    return generatedAlerts;
+  } catch (err) {
+    console.error("listNotifications error:", err);
+    return [];
+  }
 }
 
 export async function globalSearch(query: string) {

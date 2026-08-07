@@ -246,8 +246,9 @@ export function AppShell({
             <Link className="icon-button header-btn" href="/search" aria-label="Search">
               <Search size={20} />
             </Link>
-            <Link className="icon-button header-btn" href="/notifications" aria-label="Notifications">
+            <Link className="icon-button header-btn relative-btn" href="/notifications" aria-label="Notifications" prefetch={true}>
               <Bell size={20} />
+              <span className="notification-badge-dot" />
             </Link>
             <Link className="icon-button header-btn" href="/settings" aria-label="Settings">
               <Settings size={20} />
