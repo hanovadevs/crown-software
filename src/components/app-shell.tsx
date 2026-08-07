@@ -24,6 +24,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { logoutAction } from "@/app/actions/auth";
+import { BackForwardNav } from "./back-forward-nav";
 import { Brand } from "./brand";
 import { LiveRefresh } from "./live-refresh";
 import { QuickActionMenu } from "./quick-action-menu";
@@ -204,6 +205,7 @@ export function AppShell({
             >
               {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
+            <BackForwardNav />
             <div className="header-breadcrumbs">
               <span className="breadcrumb-root">Crown Accumulator</span>
               <span className="breadcrumb-sep">/</span>

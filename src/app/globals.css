@@ -320,6 +320,31 @@ a {
   gap: 16px;
 }
 
+.back-forward-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-nav-btn {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--muted-strong);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.header-nav-btn:hover {
+  background: var(--surface-strong);
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
 .mobile-menu-toggle {
   display: none;
 }
