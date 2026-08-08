@@ -52,6 +52,7 @@ const adminNavGroups: NavGroup[] = [
     title: "Sales & Purchasing",
     items: [
       { href: "/transactions", label: "Transactions", icon: Boxes },
+      { href: "/bills", label: "Invoices History", icon: FileText },
       { href: "/bills/new", label: "Generate Bill", icon: ReceiptText },
       { href: "/parties", label: "Parties", icon: Users },
     ],

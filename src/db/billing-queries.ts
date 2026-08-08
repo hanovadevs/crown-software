@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from ".";
 import { billItems, bills, parties, products, users } from "./schema";
 
@@ -83,4 +83,42 @@ export async function getBill(id: string) {
     .orderBy(asc(billItems.sortOrder));
 
   return { bill, items };
+}
+
+export async function listBills(search = "", type = "all") {
+  const conditions = [];
+
+  if (type === "invoice" || type === "quotation" || type === "tax_invoice") {
+    conditions.push(eq(bills.type, type as "invoice" | "quotation" | "tax_invoice"));
+  }
+
+  if (search.trim()) {
+    const term = `%${search.trim()}%`;
+    conditions.push(
+      sql`(${bills.billNumber} ILIKE ${term} OR ${parties.name} ILIKE ${term})`,
+    );
+  }
+
+  const billList = await db
+    .select({
+      id: bills.id,
+      billNumber: bills.billNumber,
+      type: bills.type,
+      status: bills.status,
+      billDate: bills.billDate,
+      dueDate: bills.dueDate,
+      subtotal: bills.subtotal,
+      taxAmount: bills.taxAmount,
+      totalAmount: bills.totalAmount,
+      partyName: parties.name,
+      partyPhone: parties.phone,
+      itemCount: sql<string>`(SELECT COUNT(*) FROM bill_items bi WHERE bi.bill_id = ${bills.id})`,
+    })
+    .from(bills)
+    .innerJoin(parties, eq(bills.partyId, parties.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(sql`${bills.billDate} DESC, ${bills.createdAt} DESC`)
+    .limit(100);
+
+  return billList;
 }

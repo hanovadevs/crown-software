@@ -27,26 +27,41 @@ export function BillForm({
   customers,
   products,
   today,
+  initialBillData,
 }: {
   customers: Array<{ id: string; name: string; taxNumber?: string | null }>;
   products: ProductOption[];
   today: string;
+  initialBillData?: any;
 }) {
   const [state, action, pending] = useActionState(createBillAction, initialState);
-  const nextKey = useRef(2);
-  const [items, setItems] = useState<BillItem[]>([
-    { key: 1, productId: "", description: "", quantity: "1", unitPrice: "0" },
-  ]);
-  const [billType, setBillType] = useState<"invoice" | "quotation" | "tax_invoice">("invoice");
-  const [selectedPartyId, setSelectedPartyId] = useState("");
-  const [taxRate, setTaxRate] = useState("0");
-  const [sedRate, setSedRate] = useState("0");
-  const [supplierNtn, setSupplierNtn] = useState("1234567-8");
-  const [buyerNtn, setBuyerNtn] = useState("");
-  const [timeOfSupply, setTimeOfSupply] = useState("10:30 AM");
-  const [termsOfSales, setTermsOfSales] = useState("Cash");
-  const [shipping, setShipping] = useState("0");
-  const [discount, setDiscount] = useState("0");
+  const nextKey = useRef(initialBillData?.items?.length ? initialBillData.items.length + 1 : 2);
+  const [items, setItems] = useState<BillItem[]>(() => {
+    if (initialBillData?.items?.length) {
+      return initialBillData.items.map((item: any, idx: number) => ({
+        key: idx + 1,
+        productId: item.productId || "",
+        description: item.description || "",
+        quantity: item.quantity || "1",
+        unitPrice: item.unitPrice || "0",
+      }));
+    }
+    return [{ key: 1, productId: "", description: "", quantity: "1", unitPrice: "0" }];
+  });
+  const [billType, setBillType] = useState<"invoice" | "quotation" | "tax_invoice">(
+    initialBillData?.bill?.type || "invoice",
+  );
+  const [selectedPartyId, setSelectedPartyId] = useState(
+    initialBillData?.bill?.partyId || (customers[0]?.id ?? ""),
+  );
+  const [taxRate, setTaxRate] = useState(initialBillData?.bill?.taxRate || "0");
+  const [sedRate, setSedRate] = useState(initialBillData?.bill?.sedRate || "0");
+  const [supplierNtn, setSupplierNtn] = useState(initialBillData?.bill?.supplierNtn || "1234567-8");
+  const [buyerNtn, setBuyerNtn] = useState(initialBillData?.bill?.buyerNtn || "");
+  const [timeOfSupply, setTimeOfSupply] = useState(initialBillData?.bill?.timeOfSupply || "10:30 AM");
+  const [termsOfSales, setTermsOfSales] = useState(initialBillData?.bill?.termsOfSales || "Cash");
+  const [shipping, setShipping] = useState(initialBillData?.bill?.shippingAmount || "0");
+  const [discount, setDiscount] = useState(initialBillData?.bill?.discountAmount || "0");
 
   const subtotal = useMemo(
     () =>

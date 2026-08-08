@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
-import { getBillFormOptions } from "@/db/billing-queries";
+import { getBill, getBillFormOptions } from "@/db/billing-queries";
 import { BillForm } from "./bill-form";
 
 export const metadata: Metadata = { title: "Generate Bill" };
@@ -14,15 +14,26 @@ function todayInKarachi() {
   }).format(new Date());
 }
 
-export default async function NewBillPage() {
+export default async function NewBillPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ duplicateId?: string }>;
+}) {
+  const { duplicateId } = await searchParams;
   const options = await getBillFormOptions();
+  let initialBillData = null;
+
+  if (duplicateId) {
+    initialBillData = await getBill(duplicateId);
+  }
+
   return (
     <main className="page">
       <PageHeader
-        title="Generate Bill"
-        description="Create invoices and quotations for your customers"
+        title={initialBillData ? `Regenerate Bill (Based on ${initialBillData.bill.billNumber})` : "Generate Bill"}
+        description="Create commercial invoices, quotations, and official sales tax documents"
       />
-      <BillForm {...options} today={todayInKarachi()} />
+      <BillForm {...options} today={todayInKarachi()} initialBillData={initialBillData} />
     </main>
   );
 }
