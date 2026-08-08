@@ -1,7 +1,7 @@
 import { Copy, Eye, FileText, Plus, Printer, ReceiptText, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, StatCard } from "@/components/ui";
 import { listBills } from "@/db/billing-queries";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatPKR } from "@/lib/utils";
@@ -35,38 +35,27 @@ export default async function BillsHistoryPage({
 
       {/* Summary Cards */}
       <section className="stats-grid" aria-label="Invoice Overview">
-        <div className="card stat-card">
-          <span className="table-icon blue">
-            <ReceiptText size={20} />
-          </span>
-          <div>
-            <span className="stat-label">Total Documents Generated</span>
-            <strong className="stat-value">{billList.length}</strong>
-            <small className="stat-hint">Invoices, quotations & tax records</small>
-          </div>
-        </div>
-
-        <div className="card stat-card">
-          <span className="table-icon green">
-            <FileText size={20} />
-          </span>
-          <div>
-            <span className="stat-label">Total Invoiced Volume</span>
-            <strong className="stat-value">{formatPKR(totalRevenue)}</strong>
-            <small className="stat-hint">Cumulative billed gross value</small>
-          </div>
-        </div>
-
-        <div className="card stat-card">
-          <span className="table-icon cyan">
-            <Printer size={20} />
-          </span>
-          <div>
-            <span className="stat-label">Sales Tax / S.E.D. Invoices</span>
-            <strong className="stat-value">{taxInvoiceCount}</strong>
-            <small className="stat-hint">Official FBR tax compliance copies</small>
-          </div>
-        </div>
+        <StatCard
+          icon={ReceiptText}
+          label="Total Documents Generated"
+          value={String(billList.length)}
+          hint="Invoices, quotations & tax records"
+          color="#4169f6"
+        />
+        <StatCard
+          icon={FileText}
+          label="Total Invoiced Volume"
+          value={formatPKR(totalRevenue)}
+          hint="Cumulative billed gross value"
+          color="#18c77a"
+        />
+        <StatCard
+          icon={Printer}
+          label="Sales Tax / S.E.D. Invoices"
+          value={String(taxInvoiceCount)}
+          hint="Official FBR tax compliance copies"
+          color="#13b8d3"
+        />
       </section>
 
       {/* Search & Filter Bar */}

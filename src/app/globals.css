@@ -1876,6 +1876,23 @@ legend {
   display: block;
 }
 
+.actions-cell {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.table-actions .button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .table-primary strong {
   color: var(--foreground);
   display: block;
