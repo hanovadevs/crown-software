@@ -82,8 +82,8 @@ export default async function ProductsPage({
                           {product.category || "Uncategorized"}
                         </small>
                         <div className="role-badges">
-                          {product.isSellable ? <span className="badge badge-success">Sell</span> : null}
-                          {product.isPurchasable ? <span className="badge badge-primary">Purchase</span> : null}
+                          {product.isFinishedGood ? <span className="badge badge-primary">Finished Battery</span> : null}
+                          {product.isRawMaterial ? <span className="badge badge-warning">Sub-Product / Material</span> : null}
                         </div>
                       </td>
                       <td>

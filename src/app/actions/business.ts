@@ -29,6 +29,7 @@ import { requireUser } from "@/lib/auth";
 
 export type FormState = {
   error?: string;
+  success?: boolean;
   fieldErrors?: Record<string, string[] | undefined>;
 };
 

@@ -7,8 +7,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Factory,
   FileText,
   Home,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -59,6 +61,8 @@ const adminNavGroups: NavGroup[] = [
     items: [
       { href: "/products", label: "Products", icon: Package },
       { href: "/stock", label: "Stock Levels", icon: Boxes },
+      { href: "/stock/bom", label: "Assembly BOM", icon: Layers },
+      { href: "/stock/production", label: "Production Run", icon: Factory },
       { href: "/gate-pass", label: "Gate Pass", icon: ClipboardCheck },
     ],
   },
@@ -79,10 +83,12 @@ const stockManagerNavGroups: NavGroup[] = [
     ],
   },
   {
-    title: "Inventory",
+    title: "Inventory & Production",
     items: [
       { href: "/products", label: "Products", icon: Package },
       { href: "/stock", label: "Stock Levels", icon: Boxes },
+      { href: "/stock/bom", label: "Assembly BOM", icon: Layers },
+      { href: "/stock/production", label: "Production Run", icon: Factory },
       { href: "/stock/adjust", label: "Adjust Stock", icon: Package },
       { href: "/gate-pass", label: "Gate Pass", icon: ClipboardCheck },
     ],
