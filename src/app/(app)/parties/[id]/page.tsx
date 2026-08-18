@@ -21,17 +21,11 @@ export default async function PartyDetailPage({
   const { party, activity, receivable, payable } = result;
   const netBalance = receivable - payable;
   const whatsappMessage = [
-    "Crown Accumulator",
-    "Address: 55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore",
-    "----------------------------------------",
-    "Party Ledger Statement",
-    `Party: ${party.name}`,
+    `Party Ledger Summary — ${party.name}`,
     `Receivable: ${formatPKR(receivable)}`,
     `Payable: ${formatPKR(payable)}`,
     `Net Balance: ${formatPKR(Math.abs(netBalance))} ${netBalance >= 0 ? "Receivable" : "Payable"}`,
     `Statement Date: ${formatDate(new Date())}`,
-    "",
-    "Thank you. Issued by Crown Accumulator Management System.",
   ].join("\n");
 
   return (
@@ -52,7 +46,7 @@ export default async function PartyDetailPage({
           </p>
         </div>
         <div className="card-actions detail-actions">
-          <WhatsAppLedgerButton phone={party.phone} message={whatsappMessage} />
+          <WhatsAppLedgerButton phone={party.phone} message={whatsappMessage} triggerPrint={false} />
           <Link className="button button-secondary" href={`/reports/print?type=party-ledger&partyId=${id}`}><FileText size={16} /> Print ledger</Link>
           <Link className="button button-primary" href="/transactions/new"><ArrowLeftRight size={16} /> New transaction</Link>
           <Link className="button button-secondary" href={`/parties/${id}/edit`}><Pencil size={16} /> Edit</Link>

@@ -3,7 +3,7 @@ import Image from "next/image";
 import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { requireUser } from "@/lib/auth";
-import { formatDate, formatPKR } from "@/lib/utils";
+import { formatPKR } from "@/lib/utils";
 import {
   buildReport,
   reportTypes,
@@ -59,17 +59,13 @@ export default async function PrintReportPage({
   const targetPhone = party?.phone || null;
 
   const whatsappMessage = [
-    `Crown Accumulator - ${report.title}`,
+    `${report.title} — ${periodText}`,
     party ? `Party: ${party.name}` : null,
-    party?.phone ? `Contact: ${party.phone}` : null,
-    stats ? `Opening Balance: ${formatPKR(stats.openingBalance)}` : null,
-    stats ? `Total Billed (Debits): ${formatPKR(stats.totalDebit)}` : null,
-    stats ? `Total Paid (Credits): ${formatPKR(stats.totalCredit)}` : null,
-    stats ? `Closing Balance: ${formatPKR(Math.abs(stats.closingBalance))} ${stats.closingBalance >= 0 ? "Receivable" : "Payable"}` : null,
-    `Period: ${periodText}`,
-    `Generated: ${formatDate(new Date())}`,
+    stats
+      ? `Net Balance: ${formatPKR(Math.abs(stats.closingBalance))} ${stats.closingBalance >= 0 ? "Receivable" : "Payable"}`
+      : null,
     "",
-    "Thank you. Issued by Crown Accumulator Management System.",
+    "Please find the detailed PDF report attached.",
   ]
     .filter(Boolean)
     .join("\n");
