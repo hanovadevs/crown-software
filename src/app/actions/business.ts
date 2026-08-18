@@ -122,6 +122,7 @@ export async function createPartyAction(
     },
   });
 
+  revalidatePath("/", "layout");
   redirect("/parties");
 }
 
@@ -165,6 +166,7 @@ export async function updatePartyAction(
       newValues: { name: parsed.data.name, isCustomer: parsed.data.isCustomer, isSupplier: parsed.data.isSupplier },
     });
   });
+  revalidatePath("/", "layout");
   redirect(`/parties/${partyId}`);
 }
 
@@ -267,6 +269,7 @@ export async function createProductAction(
     throw error;
   }
 
+  revalidatePath("/", "layout");
   redirect("/products");
 }
 
@@ -305,6 +308,7 @@ export async function updateProductAction(
     if (error instanceof Error && error.message.includes("duplicate key")) return { error: "That product SKU already exists." };
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect("/products");
 }
 
@@ -744,6 +748,7 @@ export async function createTransactionAction(
     throw error;
   }
 
+  revalidatePath("/", "layout");
   redirect("/transactions");
 }
 
@@ -802,6 +807,7 @@ export async function createWorkerAction(
     }
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect("/workers");
 }
 
@@ -843,6 +849,7 @@ export async function updateWorkerAction(
     if (error instanceof Error && error.message.includes("duplicate key")) return { error: "That worker code already exists." };
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect("/workers");
 }
 
@@ -994,5 +1001,6 @@ export async function updateTransactionAction(
     if (error instanceof Error && (error.message.includes("Insufficient stock") || error.message.includes("no longer exists") || error.message.includes("missing"))) return { error: error.message };
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect(`/transactions/${transactionId}`);
 }

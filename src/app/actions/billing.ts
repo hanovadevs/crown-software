@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
@@ -214,5 +215,6 @@ export async function createBillAction(
     return created.id;
   });
 
+  revalidatePath("/", "layout");
   redirect(`/bills/${billId}`);
 }

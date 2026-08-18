@@ -1,6 +1,7 @@
 "use server";
 
 import { eq, sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
@@ -187,5 +188,6 @@ export async function createGatePassAction(
     return { error: `Failed to create gate pass: ${message}` };
   }
 
+  revalidatePath("/", "layout");
   redirect(`/gate-pass/${createdId}`);
 }

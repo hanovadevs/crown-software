@@ -173,6 +173,7 @@ export async function createStockAdjustmentAction(
     }
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect("/stock");
 }
 
@@ -282,6 +283,7 @@ export async function saveWorkerPaymentAction(
     if (error instanceof Error && (error.message.includes("unavailable") || error.message.includes("missing"))) return { error: error.message };
     throw error;
   }
+  revalidatePath("/", "layout");
   redirect(`/workers/${value.workerId}`);
 }
 
