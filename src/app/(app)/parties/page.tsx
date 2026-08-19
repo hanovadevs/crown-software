@@ -109,22 +109,28 @@ export default async function PartiesPage({
                 <div className="party-details">
                   {party.contactPerson && (
                     <p>
-                      <span>Contact:</span> {party.contactPerson}
+                      <span className="party-detail-label">Contact:</span>
+                      <span>{party.contactPerson}</span>
                     </p>
                   )}
                   {party.phone && (
                     <p>
-                      <Phone size={16} /> {party.phone}
+                      <Phone size={15} />
+                      <span>{party.phone}</span>
                     </p>
                   )}
                   {party.email && (
                     <p>
-                      <Mail size={16} /> {party.email}
+                      <Mail size={15} />
+                      <span>{party.email}</span>
                     </p>
                   )}
                   {party.address && (
                     <p>
-                      <MapPin size={16} /> {party.address}
+                      <MapPin size={15} />
+                      <span className="party-address-text" title={party.address}>
+                        {party.address}
+                      </span>
                     </p>
                   )}
                 </div>
