@@ -12,6 +12,8 @@ import {
   billItems,
   billsOfMaterials,
   bills,
+  gatePasses,
+  gatePassItems,
   inventoryMovements,
   journalEntries,
   journalLines,
@@ -122,7 +124,17 @@ export async function createPartyAction(
     },
   });
 
-  revalidatePath("/", "layout");
+  await db.execute(
+    sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+      entity: "party",
+      action: "created",
+      id: party.id,
+    })})`,
+  );
+
+  revalidatePath("/parties");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/parties");
 }
 
@@ -165,8 +177,18 @@ export async function updatePartyAction(
       oldValues: { name: existing.name, isCustomer: existing.isCustomer, isSupplier: existing.isSupplier },
       newValues: { name: parsed.data.name, isCustomer: parsed.data.isCustomer, isSupplier: parsed.data.isSupplier },
     });
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "party",
+        action: "updated",
+        id: partyId,
+      })})`,
+    );
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/parties");
+  revalidatePath(`/parties/${partyId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect(`/parties/${partyId}`);
 }
 
@@ -181,11 +203,24 @@ export async function deletePartyAction(partyId: string) {
       await tx.delete(billItems).where(inArray(billItems.billId, relatedBills.map((item) => item.id)));
       await tx.delete(bills).where(eq(bills.partyId, partyId));
     }
+    await tx.update(gatePasses).set({ partyId: null }).where(eq(gatePasses.partyId, partyId));
     await tx.delete(journalLines).where(eq(journalLines.partyId, partyId));
     await tx.delete(parties).where(eq(parties.id, partyId));
     await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "party", entityId: partyId });
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "party",
+        action: "deleted",
+        id: partyId,
+      })})`,
+    );
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/parties");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  revalidatePath("/transactions");
+  revalidatePath("/bills");
+  revalidatePath("/gate-pass");
   redirect("/parties");
 }
 
@@ -258,6 +293,14 @@ export async function createProductAction(
       entityId: product.id,
       newValues: { sku: product.sku, name: product.name },
     });
+
+    await db.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "product",
+        action: "created",
+        id: product.id,
+      })})`,
+    );
   } catch (error) {
     if (
       error instanceof Error &&
@@ -269,7 +312,10 @@ export async function createProductAction(
     throw error;
   }
 
-  revalidatePath("/", "layout");
+  revalidatePath("/products");
+  revalidatePath("/stock");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/products");
 }
 
@@ -303,12 +349,23 @@ export async function updateProductAction(
         oldValues: { sku: existing.sku, name: existing.name, isSellable: existing.isSellable, isPurchasable: existing.isPurchasable },
         newValues: { sku: parsed.data.sku.toUpperCase(), name: parsed.data.name, isSellable: parsed.data.isSellable, isPurchasable: parsed.data.isPurchasable },
       });
+      await tx.execute(
+        sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+          entity: "product",
+          action: "updated",
+          id: productId,
+        })})`,
+      );
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) return { error: "That product SKU already exists." };
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/products");
+  revalidatePath(`/products/${productId}/edit`);
+  revalidatePath("/stock");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/products");
 }
 
@@ -352,6 +409,7 @@ export async function deleteProductAction(productId: string) {
     }
 
     await tx.update(billItems).set({ productId: null }).where(eq(billItems.productId, productId));
+    await tx.update(gatePassItems).set({ productId: null }).where(eq(gatePassItems.productId, productId));
 
     const [finishedBoms, materialBoms] = await Promise.all([
       tx.select({ id: billsOfMaterials.id }).from(billsOfMaterials).where(eq(billsOfMaterials.finishedProductId, productId)),
@@ -393,7 +451,12 @@ export async function deleteProductAction(productId: string) {
     );
   });
 
-  revalidatePath("/", "layout");
+  revalidatePath("/products");
+  revalidatePath("/stock");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  revalidatePath("/bills");
+  revalidatePath("/gate-pass");
   redirect("/products");
 }
 
@@ -748,7 +811,11 @@ export async function createTransactionAction(
     throw error;
   }
 
-  revalidatePath("/", "layout");
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/stock");
+  revalidatePath("/reports");
   redirect("/transactions");
 }
 
@@ -797,6 +864,13 @@ export async function createWorkerAction(
       entityId: worker.id,
       newValues: { code: worker.workerCode, name: worker.name },
     });
+    await db.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "worker",
+        action: "created",
+        id: worker.id,
+      })})`,
+    );
   } catch (error) {
     if (
       error instanceof Error &&
@@ -807,7 +881,9 @@ export async function createWorkerAction(
     }
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/workers");
 }
 
@@ -844,12 +920,22 @@ export async function updateWorkerAction(
         oldValues: { code: existing.workerCode, name: existing.name },
         newValues: { code: parsed.data.workerCode.toUpperCase(), name: parsed.data.name },
       });
+      await tx.execute(
+        sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+          entity: "worker",
+          action: "updated",
+          id: workerId,
+        })})`,
+      );
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("duplicate key")) return { error: "That worker code already exists." };
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/workers");
+  revalidatePath(`/workers/${workerId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/workers");
 }
 
@@ -869,8 +955,17 @@ export async function deleteWorkerAction(workerId: string) {
     await tx.delete(workerPayments).where(eq(workerPayments.workerId, workerId));
     await tx.delete(workers).where(eq(workers.id, workerId));
     await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "worker", entityId: workerId });
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "worker",
+        action: "deleted",
+        id: workerId,
+      })})`,
+    );
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/workers");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect("/workers");
 }
 
@@ -880,8 +975,19 @@ export async function deleteTransactionAction(transactionId: string) {
   await db.transaction(async (tx) => {
     await deleteTransactionRecords(tx, transactionId);
     await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "transaction", entityId: transactionId });
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "transaction",
+        action: "deleted",
+        id: transactionId,
+      })})`,
+    );
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/transactions");
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/stock");
+  revalidatePath("/reports");
   redirect("/transactions");
 }
 
@@ -1001,6 +1107,11 @@ export async function updateTransactionAction(
     if (error instanceof Error && (error.message.includes("Insufficient stock") || error.message.includes("no longer exists") || error.message.includes("missing"))) return { error: error.message };
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/transactions");
+  revalidatePath(`/transactions/${transactionId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/stock");
+  revalidatePath("/reports");
   redirect(`/transactions/${transactionId}`);
 }

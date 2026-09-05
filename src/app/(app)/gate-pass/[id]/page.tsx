@@ -1,8 +1,11 @@
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/print-button";
+import { DeleteButton } from "@/components/delete-button";
+import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
+import { deleteGatePassAction, updateGatePassStatusAction } from "@/app/actions/gate-pass";
 import { getGatePass } from "@/db/gate-pass-queries";
 import { formatDate } from "@/lib/utils";
 
@@ -21,16 +24,62 @@ export default async function GatePassDetailPage({
   const isInward = gatePass.direction === "inward";
   const directionLabel = isInward ? "INWARD" : "OUTWARD";
 
+  const whatsappMessage = [
+    `Gate Pass — ${gatePass.number} (${directionLabel})`,
+    `Date: ${formatDate(gatePass.date)}`,
+    gatePass.partyName ? `Party: ${gatePass.partyName}` : null,
+    gatePass.vehicleNumber ? `Vehicle: ${gatePass.vehicleNumber}` : null,
+    "",
+    "Please find the detailed Gate Pass PDF attached.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   return (
     <main className="page invoice-page">
       <div className="invoice-actions no-print">
-        <Link className="button button-secondary" href="/gate-pass">
-          <ArrowLeft size={19} /> All Gate Passes
-        </Link>
-        <Link className="button button-primary" href="/gate-pass/new">
-          New Gate Pass
-        </Link>
-        <PrintButton label="Print / Save PDF" />
+        <div className="invoice-actions-group">
+          <Link className="button button-secondary" href="/gate-pass">
+            <ArrowLeft size={18} /> All Gate Passes
+          </Link>
+          <Link className="button button-secondary" href="/gate-pass/new">
+            New Gate Pass
+          </Link>
+        </div>
+        <div className="invoice-actions-group">
+          <PrintButton label="Print / Save PDF" />
+          <WhatsAppLedgerButton
+            phone={gatePass.partyPhone || gatePass.driverPhone}
+            message={whatsappMessage}
+            documentName={gatePass.number}
+          />
+        {(gatePass.status === "issued" || gatePass.status === "draft") && (
+          <>
+            <form action={updateGatePassStatusAction.bind(null, id, "received")}>
+              <button className="button button-success" type="submit">
+                <CheckCircle2 size={16} /> Mark as Received
+              </button>
+            </form>
+            <form action={updateGatePassStatusAction.bind(null, id, "cancelled")}>
+              <button className="button button-secondary" type="submit">
+                <XCircle size={16} /> Cancel Gate Pass
+              </button>
+            </form>
+          </>
+        )}
+        {gatePass.status !== "issued" && gatePass.status !== "draft" && (
+          <form action={updateGatePassStatusAction.bind(null, id, "issued")}>
+            <button className="button button-secondary" type="submit">
+              <RotateCcw size={16} /> Re-issue Gate Pass
+            </button>
+          </form>
+        )}
+          <DeleteButton
+            action={deleteGatePassAction.bind(null, id)}
+            confirmMessage={`Delete gate pass ${gatePass.number}? This will permanently remove this gate pass.`}
+            label={`Delete ${gatePass.number}`}
+          />
+        </div>
       </div>
 
       <article className="invoice-sheet gate-pass-sheet">

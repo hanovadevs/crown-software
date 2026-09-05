@@ -81,6 +81,7 @@ export default async function PrintReportPage({
           phone={targetPhone}
           message={whatsappMessage}
           label="Send to WhatsApp"
+          documentName={`${report.title.replace(/\s+/g, "_")}_${party ? party.name.replace(/\s+/g, "_") : "Report"}`}
         />
       </div>
 

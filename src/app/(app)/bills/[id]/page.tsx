@@ -1,11 +1,14 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
+import { DeleteButton } from "@/components/delete-button";
+import { deleteBillAction, updateBillStatusAction } from "@/app/actions/billing";
 import { getBill } from "@/db/billing-queries";
+import { getCompanySettings } from "@/db/operations-queries";
 import { formatDate, formatPKR } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Bill / Invoice" };
@@ -25,9 +28,18 @@ export default async function BillPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getBill(id);
+  const [result, settings] = await Promise.all([
+    getBill(id),
+    getCompanySettings(),
+  ]);
   if (!result) notFound();
   const { bill, items } = result;
+
+  const company = (settings?.company ?? {}) as Record<string, string>;
+  const companyName = company.name || "Crown Accumulator";
+  const companyAddress = company.address || "55/28-C, AKBAR COLONY, MOMINPURA ROAD, DAROGHAWALA, LAHORE";
+  const companyPhone = company.phone || "+92 300 1234567";
+  const companyNtn = bill.supplierNtn || company.taxNumber || "1234567-8";
 
   const isTaxInvoice = bill.type === "tax_invoice";
 
@@ -51,34 +63,112 @@ export default async function BillPage({
   return (
     <main className="page invoice-page">
       <div className="invoice-actions no-print">
-        <Link className="button button-secondary" href="/bills/new">
-          <ArrowLeft size={19} /> New Bill
-        </Link>
-        <PrintButton label="Print / Save PDF" />
-        <WhatsAppLedgerButton phone={bill.party.phone} message={whatsappMessage} />
+        <div className="invoice-actions-group">
+          <Link className="button button-secondary" href="/bills">
+            <ArrowLeft size={18} /> All Bills
+          </Link>
+          <Link className="button button-secondary" href="/bills/new">
+            New Bill
+          </Link>
+        </div>
+        <div className="invoice-actions-group">
+          <PrintButton label="Print / Save PDF" />
+          <WhatsAppLedgerButton
+            phone={bill.party.phone}
+            message={whatsappMessage}
+            documentName={bill.billNumber}
+          />
+          {bill.status === "issued" && (
+            <>
+              <form action={updateBillStatusAction.bind(null, id, "paid")}>
+                <button className="button button-success" type="submit">
+                  <CheckCircle2 size={16} /> Mark as Paid
+                </button>
+              </form>
+              <form action={updateBillStatusAction.bind(null, id, "cancelled")}>
+                <button className="button button-secondary" type="submit">
+                  <XCircle size={16} /> Cancel Bill
+                </button>
+              </form>
+            </>
+          )}
+          {bill.status !== "issued" && (
+            <form action={updateBillStatusAction.bind(null, id, "issued")}>
+              <button className="button button-secondary" type="submit">
+                <RotateCcw size={16} /> Re-open (Mark Issued)
+              </button>
+            </form>
+          )}
+          <DeleteButton
+            action={deleteBillAction.bind(null, id)}
+            confirmMessage={`Delete bill ${bill.billNumber}? This will permanently remove this invoice.`}
+            label={`Delete ${bill.billNumber}`}
+          />
+        </div>
       </div>
 
       {isTaxInvoice ? (
         <article className="invoice-sheet tax-invoice-sheet">
-          <header className="tax-invoice-top">
-            <div className="tax-title-box">
-              <h1>SALES TAX / S.E.D. INVOICE</h1>
+          {/* Corporate Letterhead Header */}
+          <header className="tax-letterhead">
+            <div className="tax-letterhead-brand">
+              <div className="tax-logo-frame">
+                <Image
+                  className="tax-brand-logo"
+                  src="/CrownAccumulatorbox.jpeg"
+                  alt={companyName}
+                  width={300}
+                  height={291}
+                  priority
+                />
+              </div>
+              <div className="tax-brand-details">
+                <h1 className="tax-company-name">{companyName}</h1>
+                <p className="tax-company-tagline">Manufacturers of Crown &amp; SOLO Lead-Acid Batteries</p>
+                <p className="tax-company-address">{companyAddress}</p>
+                <div className="tax-company-contact">
+                  <span>Phone: {companyPhone}</span>
+                  <span className="tax-contact-sep">•</span>
+                  <span>NTN: {companyNtn}</span>
+                  <span className="tax-contact-sep">•</span>
+                  <span>STRN: 12-00-1234-567-89</span>
+                </div>
+              </div>
             </div>
-            <div className="tax-copy-options">
-              <span>Original</span>
-              <span>Duplicate</span>
-              <span>Triplicate</span>
+
+            <div className="tax-letterhead-co-brand">
+              <Image
+                className="tax-solo-logo"
+                src="/solo-removebg-preview.png"
+                alt="SOLO"
+                width={675}
+                height={379}
+              />
+              <span className="tax-co-tag">Official Co-Brand Partner</span>
             </div>
           </header>
+
+          {/* Statutory Title Box & Copy Selection */}
+          <div className="tax-invoice-top">
+            <div className="tax-title-box">
+              <h2>SALES TAX / S.E.D. INVOICE</h2>
+              <span className="tax-statutory-ref">Issued under Section 23 of Sales Tax Act, 1990 &amp; Federal Excise Act, 2005</span>
+            </div>
+            <div className="tax-copy-options">
+              <span className="active-copy">✓ Original (Buyer)</span>
+              <span>Duplicate (Supplier)</span>
+              <span>Triplicate (Record)</span>
+            </div>
+          </div>
 
           <section className="tax-header-meta">
             <div className="tax-meta-row">
               <div className="tax-meta-cell">
-                <span className="label">Serial No.</span>
+                <span className="label">Serial / Invoice No.</span>
                 <strong className="serial-no-highlight">{bill.billNumber}</strong>
               </div>
               <div className="tax-meta-cell">
-                <span className="label">Date</span>
+                <span className="label">Date of Supply</span>
                 <strong>{formatDate(bill.billDate)}</strong>
               </div>
               <div className="tax-meta-cell">
@@ -89,31 +179,33 @@ export default async function BillPage({
 
             <div className="tax-parties-grid">
               <div className="tax-party-col">
+                <div className="tax-party-badge">SUPPLIER (CONSIGNOR)</div>
                 <div className="tax-field-line">
-                  <span className="field-label">Supplier&apos;s Name</span>
-                  <span className="field-value">Crown Accumulator</span>
+                  <span className="field-label">Name</span>
+                  <span className="field-value"><strong>{companyName}</strong></span>
                 </div>
                 <div className="tax-field-line">
-                  <span className="field-label">Address</span>
-                  <span className="field-value">55/28-C, AKBAR COLONY, MOMINPURA ROAD, DAROGHAWALA, LAHORE</span>
+                  <span className="field-label">Factory Address</span>
+                  <span className="field-value">{companyAddress}</span>
                 </div>
                 <div className="tax-field-line">
                   <span className="field-label">Telephone No.</span>
-                  <span className="field-value">+92 300 1234567</span>
+                  <span className="field-value">{companyPhone}</span>
                 </div>
                 <div className="tax-field-line">
-                  <span className="field-label">National Tax No.</span>
-                  <span className="field-value">{bill.supplierNtn || "1234567-8"}</span>
+                  <span className="field-label">National Tax No. (NTN)</span>
+                  <span className="field-value"><strong>{companyNtn}</strong></span>
                 </div>
               </div>
 
               <div className="tax-party-col">
+                <div className="tax-party-badge">BUYER (CONSIGNEE)</div>
                 <div className="tax-field-line">
-                  <span className="field-label">Buyer&apos;s Name</span>
-                  <span className="field-value">{bill.party.name}</span>
+                  <span className="field-label">Name</span>
+                  <span className="field-value"><strong>{bill.party.name}</strong></span>
                 </div>
                 <div className="tax-field-line">
-                  <span className="field-label">Address</span>
+                  <span className="field-label">Buyer Address</span>
                   <span className="field-value">{bill.party.address || "—"}</span>
                 </div>
                 <div className="tax-field-line">
@@ -121,15 +213,15 @@ export default async function BillPage({
                   <span className="field-value">{bill.party.phone || "—"}</span>
                 </div>
                 <div className="tax-field-line">
-                  <span className="field-label">National Tax No.</span>
-                  <span className="field-value">{bill.buyerNtn || bill.party.taxNumber || "—"}</span>
+                  <span className="field-label">National Tax No. (NTN)</span>
+                  <span className="field-value"><strong>{bill.buyerNtn || bill.party.taxNumber || "—"}</strong></span>
                 </div>
               </div>
             </div>
 
-            <div className="tax-field-line full-line">
+            <div className="tax-field-line full-line tax-terms-row">
               <span className="field-label">Terms of Sales</span>
-              <span className="field-value">{bill.termsOfSales || "Cash"}</span>
+              <span className="field-value"><strong>{bill.termsOfSales || "Cash"}</strong></span>
             </div>
           </section>
 
@@ -243,55 +335,95 @@ export default async function BillPage({
         <article className="invoice-sheet">
           <header className="invoice-head">
             <div className="invoice-brand">
-              <Image
-                className="print-brand-logo"
-                src="/CrownAccumulatorbox.jpeg"
-                alt="Crown Accumulator"
-                width={300}
-                height={291}
-              />
-              <div>
-                <h1>Crown Accumulator</h1>
-                <p style={{ fontWeight: 600, color: "#1e293b", margin: "2px 0" }}>55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore</p>
-                <p style={{ fontSize: "12px", opacity: 0.8 }}>Battery Manufacturing &amp; Management System</p>
+              <div className="brand-logo-frame">
+                <Image
+                  className="print-brand-logo"
+                  src="/CrownAccumulatorbox.jpeg"
+                  alt={companyName}
+                  width={300}
+                  height={291}
+                  priority
+                />
+              </div>
+              <div className="brand-details">
+                <div className="brand-title-wrap">
+                  <h1>{companyName}</h1>
+                  <span className="brand-subbadge">Batteries &amp; Power</span>
+                </div>
+                <p className="brand-tagline">Manufacturers of Premium Lead-Acid &amp; Tubular Batteries</p>
+                <p className="brand-address">{companyAddress}</p>
+                <div className="brand-contact">
+                  <span>Phone: {companyPhone}</span>
+                  <span className="contact-sep">•</span>
+                  <span>NTN: {companyNtn}</span>
+                  <span className="contact-sep">•</span>
+                  <span>Lahore, Pakistan</span>
+                </div>
               </div>
             </div>
-            <div className="invoice-solo">
-              <Image
-                className="solo-logo"
-                src="/solo-removebg-preview.png"
-                alt="SOLO"
-                width={675}
-                height={379}
-              />
-              <small>Powered by SOLO</small>
+
+            <div className="invoice-head-right">
+              <div className="invoice-type-pill">
+                {bill.type === "invoice"
+                  ? "COMMERCIAL INVOICE"
+                  : bill.type === "tax_invoice"
+                    ? "SALES TAX INVOICE"
+                    : "OFFICIAL PRICE QUOTATION"}
+              </div>
+              <div className="invoice-solo">
+                <Image
+                  className="solo-logo"
+                  src="/solo-removebg-preview.png"
+                  alt="SOLO"
+                  width={675}
+                  height={379}
+                />
+                <small>Powered by SOLO Technology</small>
+              </div>
             </div>
           </header>
+
           <div className="invoice-rule" />
+
           <section className="invoice-meta">
-            <div>
-              <span>Bill to</span>
+            <div className="invoice-party-card">
+              <span className="party-card-eyebrow">Billed To (Customer)</span>
               <h2>{bill.party.name}</h2>
-              <p>{bill.party.contactPerson}</p>
-              <p>{bill.party.address}</p>
-              <p>{bill.party.phone}</p>
+              {bill.party.contactPerson && <p className="party-contact-person">Attn: {bill.party.contactPerson}</p>}
+              <p className="party-address">{bill.party.address || "Lahore, Pakistan"}</p>
+              <p className="party-phone">Tel: {bill.party.phone || "—"}</p>
+              {bill.party.taxNumber && <p className="party-tax">NTN/STRN: {bill.party.taxNumber}</p>}
             </div>
-            <dl>
+            <dl className="invoice-meta-dl">
               <div>
                 <dt>{bill.type === "invoice" ? "Invoice" : "Quotation"} No.</dt>
-                <dd>{bill.billNumber}</dd>
+                <dd className="invoice-meta-number">{bill.billNumber}</dd>
               </div>
               <div>
-                <dt>Date</dt>
+                <dt>Issue Date</dt>
                 <dd>{formatDate(bill.billDate)}</dd>
               </div>
               <div>
-                <dt>Due date</dt>
+                <dt>Due Date</dt>
                 <dd>{formatDate(bill.dueDate)}</dd>
               </div>
               <div>
-                <dt>Status</dt>
-                <dd className="capitalize">{bill.status}</dd>
+                <dt>Document Status</dt>
+                <dd>
+                  <span
+                    className={`badge ${
+                      bill.status === "paid"
+                        ? "badge-success"
+                        : bill.status === "issued"
+                          ? "badge-primary"
+                          : bill.status === "cancelled"
+                            ? "badge-danger"
+                            : "badge-secondary"
+                    }`}
+                  >
+                    {bill.status.toUpperCase()}
+                  </span>
+                </dd>
               </div>
             </dl>
           </section>

@@ -10,8 +10,20 @@ export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return new Response(null, { status: 401 });
 
-  const client = await pool.connect();
-  await client.query("LISTEN crown_updates");
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query("LISTEN crown_updates");
+  } catch (err) {
+    if (client) {
+      try {
+        client.release();
+      } catch {}
+    }
+    // Return 204 if pool is exhausted or LISTEN is unsupported
+    return new Response(null, { status: 204 });
+  }
+
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let closed = false;
   let notificationHandler:
@@ -28,7 +40,9 @@ export async function GET(request: Request) {
     } catch {
       // The connection may already be closed when the browser disconnects.
     } finally {
-      client.release();
+      try {
+        client.release();
+      } catch {}
     }
   };
 

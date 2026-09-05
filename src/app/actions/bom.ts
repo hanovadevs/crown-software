@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { billOfMaterialItems, billsOfMaterials } from "@/db/schema";
+import { billOfMaterialItems, billsOfMaterials, workOrders } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 
 import type { FormState } from "./business";
@@ -66,6 +66,7 @@ export async function saveBomAction(prevState: FormState, formData: FormData): P
             outputQuantity: parsed.outputQuantity.toString(),
             notes: parsed.notes,
             versionNumber: existing[0].versionNumber + 1,
+            isActive: true,
             updatedAt: new Date(),
           })
           .where(eq(billsOfMaterials.id, bomId));
@@ -104,4 +105,28 @@ export async function saveBomAction(prevState: FormState, formData: FormData): P
     console.error("saveBomAction error:", err);
     return { error: err.message || "Failed to save Bill of Materials recipe" };
   }
+}
+
+export async function deleteBomAction(bomId: string) {
+  const user = await requireUser();
+  if (user.role !== "admin" && user.role !== "manager" && user.role !== "production" && user.role !== "inventory") {
+    throw new Error("Unauthorized to delete Bill of Materials");
+  }
+
+  await db.transaction(async (tx) => {
+    const [bom] = await tx.select().from(billsOfMaterials).where(eq(billsOfMaterials.id, bomId)).limit(1);
+    if (!bom) return;
+
+    const orders = await tx.select({ id: workOrders.id }).from(workOrders).where(eq(workOrders.bomId, bomId));
+    if (orders.length > 0) {
+      await tx.update(billsOfMaterials).set({ isActive: false, updatedAt: new Date() }).where(eq(billsOfMaterials.id, bomId));
+      return;
+    }
+
+    await tx.delete(billOfMaterialItems).where(eq(billOfMaterialItems.bomId, bomId));
+    await tx.delete(billsOfMaterials).where(eq(billsOfMaterials.id, bomId));
+  });
+
+  revalidatePath("/stock");
+  revalidatePath("/stock/bom");
 }

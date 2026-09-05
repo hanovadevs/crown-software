@@ -4,6 +4,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { listGatePasses } from "@/db/gate-pass-queries";
 import { formatDate } from "@/lib/utils";
+import { deleteGatePassAction } from "@/app/actions/gate-pass";
+import { DeleteButton } from "@/components/delete-button";
 
 export const metadata: Metadata = { title: "Gate Passes" };
 
@@ -104,12 +106,19 @@ export default async function GatePassListPage({
                       </span>
                     </td>
                     <td>
-                      <Link
-                        className="button button-secondary small-button"
-                        href={`/gate-pass/${gp.id}`}
-                      >
-                        <Eye size={16} /> View
-                      </Link>
+                      <div className="table-actions">
+                        <Link
+                          className="button button-secondary small-button"
+                          href={`/gate-pass/${gp.id}`}
+                        >
+                          <Eye size={16} /> View
+                        </Link>
+                        <DeleteButton
+                          action={deleteGatePassAction.bind(null, gp.id)}
+                          confirmMessage={`Delete gate pass ${gp.number}? This will permanently remove this record.`}
+                          label={`Delete ${gp.number}`}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))

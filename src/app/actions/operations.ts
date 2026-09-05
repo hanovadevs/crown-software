@@ -173,7 +173,11 @@ export async function createStockAdjustmentAction(
     }
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/stock");
+  revalidatePath("/products");
+  revalidatePath("/dashboard");
+  revalidatePath("/notifications");
+  revalidatePath("/reports");
   redirect("/stock");
 }
 
@@ -283,7 +287,10 @@ export async function saveWorkerPaymentAction(
     if (error instanceof Error && (error.message.includes("unavailable") || error.message.includes("missing"))) return { error: error.message };
     throw error;
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/workers");
+  revalidatePath(`/workers/${value.workerId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect(`/workers/${value.workerId}`);
 }
 
@@ -298,7 +305,17 @@ export async function deleteWorkerPaymentAction(paymentId: string) {
     await deleteSourceJournal(tx, "worker_payment", paymentId);
     await tx.delete(workerPayments).where(eq(workerPayments.id, paymentId));
     await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "worker_payment", entityId: paymentId });
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "worker_payment",
+        action: "deleted",
+        id: paymentId,
+      })})`,
+    );
   });
-  revalidatePath("/", "layout");
+  revalidatePath("/workers");
+  if (workerId) revalidatePath(`/workers/${workerId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
   redirect(workerId ? `/workers/${workerId}` : "/workers");
 }

@@ -215,6 +215,89 @@ export async function createBillAction(
     return created.id;
   });
 
-  revalidatePath("/", "layout");
+  revalidatePath("/bills");
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/reports");
   redirect(`/bills/${billId}`);
+}
+
+export async function updateBillStatusAction(
+  billId: string,
+  newStatus: "issued" | "paid" | "cancelled",
+) {
+  const user = await requireUser();
+  if (user.role === "viewer") {
+    throw new Error("You do not have permission to update bills.");
+  }
+
+  await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(bills).where(eq(bills.id, billId)).limit(1);
+    if (!bill) throw new Error("Bill not found.");
+
+    await tx
+      .update(bills)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(bills.id, billId));
+
+    await tx.insert(auditLogs).values({
+      userId: user.id,
+      action: "update",
+      entityType: "bill",
+      entityId: billId,
+      oldValues: { status: bill.status },
+      newValues: { status: newStatus },
+    });
+
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "bill",
+        action: "status_changed",
+        id: billId,
+      })})`,
+    );
+  });
+
+  revalidatePath("/bills");
+  revalidatePath(`/bills/${billId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/reports");
+}
+
+export async function deleteBillAction(billId: string) {
+  const user = await requireUser();
+  if (user.role === "viewer") {
+    throw new Error("You do not have permission to delete bills.");
+  }
+
+  await db.transaction(async (tx) => {
+    const [bill] = await tx.select().from(bills).where(eq(bills.id, billId)).limit(1);
+    if (!bill) return;
+
+    await tx.delete(billItems).where(eq(billItems.billId, billId));
+    await tx.delete(bills).where(eq(bills.id, billId));
+
+    await tx.insert(auditLogs).values({
+      userId: user.id,
+      action: "archive",
+      entityType: "bill",
+      entityId: billId,
+      oldValues: { billNumber: bill.billNumber, totalAmount: bill.totalAmount },
+    });
+
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "bill",
+        action: "deleted",
+        id: billId,
+      })})`,
+    );
+  });
+
+  revalidatePath("/bills");
+  revalidatePath("/dashboard");
+  revalidatePath("/parties");
+  revalidatePath("/reports");
+  redirect("/bills");
 }

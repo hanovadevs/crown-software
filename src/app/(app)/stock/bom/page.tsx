@@ -3,6 +3,8 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { getProductionFormData } from "@/db/bom-queries";
 import { requireUser } from "@/lib/auth";
+import { deleteBomAction } from "@/app/actions/bom";
+import { DeleteButton } from "@/components/delete-button";
 import { BomBuilder } from "./bom-builder";
 
 export const metadata: Metadata = { title: "Bill of Materials (BOM Recipes)" };
@@ -43,6 +45,7 @@ export default async function BomPage() {
                   <th>Finished Battery SKU</th>
                   <th>Batch Output</th>
                   <th>Sub-Product Ingredients</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,6 +69,13 @@ export default async function BomPage() {
                           </span>
                         ))}
                       </div>
+                    </td>
+                    <td>
+                      <DeleteButton
+                        action={deleteBomAction.bind(null, bom.id)}
+                        confirmMessage={`Delete recipe ${bom.code}? This will remove or deactivate this assembly definition.`}
+                        label={`Delete ${bom.code}`}
+                      />
                     </td>
                   </tr>
                 ))}

@@ -6,6 +6,8 @@ describe("WhatsApp links", () => {
     expect(normalizeWhatsAppNumber("0300-1234567")).toBe("923001234567");
     expect(normalizeWhatsAppNumber("300 1234567")).toBe("923001234567");
     expect(normalizeWhatsAppNumber("+92 300 1234567")).toBe("923001234567");
+    expect(normalizeWhatsAppNumber("03446176261/03339180978")).toBe("923446176261");
+    expect(normalizeWhatsAppNumber("0300-1234567, 0321-7654321")).toBe("923001234567");
   });
   it("rejects incomplete numbers", () => {
     expect(normalizeWhatsAppNumber("1234")).toBeNull();

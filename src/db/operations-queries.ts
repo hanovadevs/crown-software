@@ -4,6 +4,7 @@ import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from ".";
 import {
   appSettings,
+  bills,
   gatePasses,
   notifications,
   parties,
@@ -206,10 +207,10 @@ export async function listNotifications(userId: string) {
 
 export async function globalSearch(query: string) {
   if (query.trim().length < 2) {
-    return { parties: [], products: [], transactions: [] };
+    return { parties: [], products: [], transactions: [], bills: [], gatePasses: [], workers: [] };
   }
   const term = `%${query.trim()}%`;
-  const [partyResults, productResults, transactionResults] = await Promise.all([
+  const [partyResults, productResults, transactionResults, billResults, gatePassResults, workerResults] = await Promise.all([
     db
       .select({ id: parties.id, name: parties.name, phone: parties.phone })
       .from(parties)
@@ -240,11 +241,57 @@ export async function globalSearch(query: string) {
         ),
       )
       .limit(10),
+    db
+      .select({
+        id: bills.id,
+        billNumber: bills.billNumber,
+        type: bills.type,
+        totalAmount: bills.totalAmount,
+      })
+      .from(bills)
+      .where(ilike(bills.billNumber, term))
+      .limit(10),
+    db
+      .select({
+        id: gatePasses.id,
+        gatePassNumber: gatePasses.gatePassNumber,
+        direction: gatePasses.direction,
+        driverName: gatePasses.driverName,
+        vehicleNumber: gatePasses.vehicleNumber,
+      })
+      .from(gatePasses)
+      .where(
+        or(
+          ilike(gatePasses.gatePassNumber, term),
+          ilike(gatePasses.driverName, term),
+          ilike(gatePasses.vehicleNumber, term),
+        ),
+      )
+      .limit(10),
+    db
+      .select({
+        id: workers.id,
+        name: workers.name,
+        workerCode: workers.workerCode,
+        designation: workers.designation,
+      })
+      .from(workers)
+      .where(
+        or(
+          ilike(workers.name, term),
+          ilike(workers.workerCode, term),
+          ilike(workers.phone, term),
+        ),
+      )
+      .limit(10),
   ]);
   return {
     parties: partyResults,
     products: productResults,
     transactions: transactionResults,
+    bills: billResults,
+    gatePasses: gatePassResults,
+    workers: workerResults,
   };
 }
 

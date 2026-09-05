@@ -188,6 +188,86 @@ export async function createGatePassAction(
     return { error: `Failed to create gate pass: ${message}` };
   }
 
-  revalidatePath("/", "layout");
+  revalidatePath("/gate-pass");
+  revalidatePath("/dashboard");
+  revalidatePath("/notifications");
   redirect(`/gate-pass/${createdId}`);
+}
+
+export async function updateGatePassStatusAction(
+  gatePassId: string,
+  newStatus: "draft" | "issued" | "received" | "cancelled",
+) {
+  const user = await requireUser();
+  if (user.role === "viewer") {
+    throw new Error("You do not have permission to update gate passes.");
+  }
+
+  await db.transaction(async (tx) => {
+    const [gp] = await tx.select().from(gatePasses).where(eq(gatePasses.id, gatePassId)).limit(1);
+    if (!gp) throw new Error("Gate pass not found.");
+
+    await tx
+      .update(gatePasses)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(gatePasses.id, gatePassId));
+
+    await tx.insert(auditLogs).values({
+      userId: user.id,
+      action: "update",
+      entityType: "gate_pass",
+      entityId: gatePassId,
+      oldValues: { status: gp.status },
+      newValues: { status: newStatus },
+    });
+
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "gate_pass",
+        action: "status_changed",
+        id: gatePassId,
+      })})`,
+    );
+  });
+
+  revalidatePath("/gate-pass");
+  revalidatePath(`/gate-pass/${gatePassId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/notifications");
+}
+
+export async function deleteGatePassAction(gatePassId: string) {
+  const user = await requireUser();
+  if (user.role === "viewer") {
+    throw new Error("You do not have permission to delete gate passes.");
+  }
+
+  await db.transaction(async (tx) => {
+    const [gp] = await tx.select().from(gatePasses).where(eq(gatePasses.id, gatePassId)).limit(1);
+    if (!gp) return;
+
+    await tx.delete(gatePassItems).where(eq(gatePassItems.gatePassId, gatePassId));
+    await tx.delete(gatePasses).where(eq(gatePasses.id, gatePassId));
+
+    await tx.insert(auditLogs).values({
+      userId: user.id,
+      action: "archive",
+      entityType: "gate_pass",
+      entityId: gatePassId,
+      oldValues: { gatePassNumber: gp.gatePassNumber },
+    });
+
+    await tx.execute(
+      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
+        entity: "gate_pass",
+        action: "deleted",
+        id: gatePassId,
+      })})`,
+    );
+  });
+
+  revalidatePath("/gate-pass");
+  revalidatePath("/dashboard");
+  revalidatePath("/notifications");
+  redirect("/gate-pass");
 }

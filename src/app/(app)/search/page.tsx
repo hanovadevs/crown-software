@@ -1,8 +1,9 @@
-import { ArrowLeftRight, Building2, Package, Search } from "lucide-react";
+import { ArrowLeftRight, Building2, ClipboardCheck, FileText, Package, Search, UserCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { globalSearch } from "@/db/operations-queries";
+import { formatPKR } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Search" };
 
@@ -16,13 +17,16 @@ export default async function SearchPage({
   const hasResults =
     results.parties.length ||
     results.products.length ||
-    results.transactions.length;
+    results.transactions.length ||
+    results.bills.length ||
+    results.gatePasses.length ||
+    results.workers.length;
 
   return (
     <main className="page form-page">
       <PageHeader
         title="Global Search"
-        description="Find parties, products, and transactions"
+        description="Find parties, products, transactions, invoices, gate passes, and workers"
       />
       <form className="card filter-bar" method="get">
         <div className="search-field">
@@ -31,7 +35,7 @@ export default async function SearchPage({
             className="input has-icon"
             defaultValue={q}
             name="q"
-            placeholder="Type at least two characters…"
+            placeholder="Search by name, code, invoice #, GP #, SKU…"
             autoFocus
           />
         </div>
@@ -44,7 +48,7 @@ export default async function SearchPage({
         <section className="card empty-state">
           <Search size={40} />
           <h2>No results</h2>
-          <p>Try a company name, SKU, transaction number, or description.</p>
+          <p>Try a party name, SKU, invoice number, gate pass number, or worker name.</p>
         </section>
       ) : (
         <section className="search-results">
@@ -96,6 +100,54 @@ export default async function SearchPage({
                     <span>
                       <strong>{transaction.description}</strong>
                       <small>{transaction.number}</small>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          )}
+          {results.bills.length > 0 && (
+            <article className="card panel">
+              <h2 className="section-title">Invoices & Bills</h2>
+              <div className="result-list">
+                {results.bills.map((bill) => (
+                  <Link href={`/bills/${bill.id}`} key={bill.id}>
+                    <FileText size={19} />
+                    <span>
+                      <strong>{bill.billNumber}</strong>
+                      <small>{bill.type.replaceAll("_", " ")} · {formatPKR(bill.totalAmount)}</small>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          )}
+          {results.gatePasses.length > 0 && (
+            <article className="card panel">
+              <h2 className="section-title">Gate Passes</h2>
+              <div className="result-list">
+                {results.gatePasses.map((gp) => (
+                  <Link href={`/gate-pass/${gp.id}`} key={gp.id}>
+                    <ClipboardCheck size={19} />
+                    <span>
+                      <strong>{gp.gatePassNumber}</strong>
+                      <small>{gp.direction.toUpperCase()}{gp.vehicleNumber ? ` · ${gp.vehicleNumber}` : ""}{gp.driverName ? ` · ${gp.driverName}` : ""}</small>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </article>
+          )}
+          {results.workers.length > 0 && (
+            <article className="card panel">
+              <h2 className="section-title">Workers</h2>
+              <div className="result-list">
+                {results.workers.map((worker) => (
+                  <Link href={`/workers/${worker.id}`} key={worker.id}>
+                    <UserCheck size={19} />
+                    <span>
+                      <strong>{worker.name}</strong>
+                      <small>{worker.workerCode}{worker.designation ? ` · ${worker.designation}` : ""}</small>
                     </span>
                   </Link>
                 ))}

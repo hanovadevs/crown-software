@@ -5,6 +5,8 @@ import { PageHeader, StatCard } from "@/components/ui";
 import { listBills } from "@/db/billing-queries";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatPKR } from "@/lib/utils";
+import { deleteBillAction } from "@/app/actions/billing";
+import { DeleteButton } from "@/components/delete-button";
 
 export const metadata: Metadata = { title: "Invoices & Bills History" };
 
@@ -169,6 +171,11 @@ export default async function BillsHistoryPage({
                           >
                             <Copy size={15} /> Duplicate
                           </Link>
+                          <DeleteButton
+                            action={deleteBillAction.bind(null, bill.id)}
+                            confirmMessage={`Delete bill ${bill.billNumber}? This will permanently remove this invoice and its items.`}
+                            label={`Delete ${bill.billNumber}`}
+                          />
                         </div>
                       </td>
                     </tr>
