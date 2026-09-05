@@ -61,36 +61,36 @@ export default async function BillsHistoryPage({
       </section>
 
       {/* Search & Filter Bar */}
-      <form className="filter-bar" method="get">
+      <form className="card filter-bar bills-filter-bar" method="get">
         <div className="search-field">
-          <Search size={18} />
+          <Search className="search-field-icon" size={17} />
           <input
             className="input search-input"
             defaultValue={q}
             name="q"
-            placeholder="Search by Invoice # (e.g. INV-2026-00001) or customer name..."
+            placeholder="Search by invoice # (e.g. INV-2026-00001) or customer name..."
             type="search"
           />
         </div>
 
-        <div className="filter-group">
+        <div className="filter-controls">
           <select className="select filter-select" defaultValue={type} name="type">
             <option value="all">All Document Types</option>
             <option value="invoice">Commercial Invoice (INV)</option>
             <option value="quotation">Quotation (QTN)</option>
             <option value="tax_invoice">Sales Tax Invoice (STI)</option>
           </select>
-          <button className="button button-secondary" type="submit">
+          <button className="button button-secondary filter-button" type="submit">
             Filter
           </button>
         </div>
       </form>
 
       {/* Bills Table */}
-      <section className="card form-card">
+      <section className="card table-card">
         {billList.length ? (
-          <div className="table-wrapper">
-            <table className="data-table">
+          <div className="table-scroll">
+            <table className="data-table bills-table">
               <thead>
                 <tr>
                   <th>Document Number</th>
@@ -98,9 +98,9 @@ export default async function BillsHistoryPage({
                   <th>Customer Name</th>
                   <th>Date</th>
                   <th>Items</th>
-                  <th className="amount-cell">Total Amount</th>
+                  <th className="text-right">Total Amount</th>
                   <th>Status</th>
-                  <th className="actions-cell">Actions</th>
+                  <th className="actions-cell text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,7 +115,9 @@ export default async function BillsHistoryPage({
                           <span className={`table-icon ${isTax ? "cyan" : isQtn ? "orange" : "blue"}`}>
                             <ReceiptText size={18} />
                           </span>
-                          <strong>{bill.billNumber}</strong>
+                          <Link className="doc-number-link" href={`/bills/${bill.id}`} title="View Document">
+                            <strong>{bill.billNumber}</strong>
+                          </Link>
                         </div>
                       </td>
                       <td>
@@ -134,12 +136,14 @@ export default async function BillsHistoryPage({
                           <small className="cell-subtitle">{bill.partyPhone}</small>
                         )}
                       </td>
-                      <td>{formatDate(bill.billDate)}</td>
+                      <td style={{ whiteSpace: "nowrap" }}>{formatDate(bill.billDate)}</td>
                       <td>
-                        <strong>{bill.itemCount} Items</strong>
+                        <span className="items-count-badge">
+                          {bill.itemCount} {Number(bill.itemCount) === 1 ? "Item" : "Items"}
+                        </span>
                       </td>
-                      <td className="amount-cell">
-                        <strong style={{ fontSize: "0.95rem" }}>{formatPKR(bill.totalAmount)}</strong>
+                      <td className="amount-cell text-right">
+                        <strong className="amount-value">{formatPKR(bill.totalAmount)}</strong>
                       </td>
                       <td>
                         <span
@@ -155,21 +159,21 @@ export default async function BillsHistoryPage({
                           {bill.status}
                         </span>
                       </td>
-                      <td className="actions-cell">
+                      <td className="actions-cell text-right">
                         <div className="table-actions">
                           <Link
                             className="button button-secondary small-button"
                             href={`/bills/${bill.id}`}
                             title="Review / Print Document"
                           >
-                            <Eye size={15} /> Review & Print
+                            <Eye size={14} /> View
                           </Link>
                           <Link
                             className="button button-secondary small-button"
                             href={`/bills/new?duplicateId=${bill.id}`}
                             title="Generate / Duplicate Previous Bill"
                           >
-                            <Copy size={15} /> Duplicate
+                            <Copy size={14} /> Duplicate
                           </Link>
                           <DeleteButton
                             action={deleteBillAction.bind(null, bill.id)}
