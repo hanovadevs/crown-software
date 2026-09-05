@@ -124,7 +124,6 @@ export default async function BillPage({
               </div>
               <div className="tax-brand-details">
                 <h1 className="tax-company-name">{companyName}</h1>
-                <p className="tax-company-tagline">Manufacturers of Crown &amp; SOLO Lead-Acid Batteries</p>
                 <p className="tax-company-address">{companyAddress}</p>
                 <div className="tax-company-contact">
                   <span>Phone: {companyPhone}</span>
@@ -137,13 +136,16 @@ export default async function BillPage({
             </div>
 
             <div className="tax-letterhead-co-brand">
-              <Image
-                className="tax-solo-logo"
-                src="/solo-removebg-preview.png"
-                alt="SOLO"
-                width={675}
-                height={379}
-              />
+              <div className="solo-logo-frame">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="solo-logo-img"
+                  src="/solo-removebg-preview.png"
+                  alt="SOLO"
+                  width={104}
+                  height={48}
+                />
+              </div>
               <span className="tax-co-tag">Official Co-Brand Partner</span>
             </div>
           </header>
@@ -347,10 +349,8 @@ export default async function BillPage({
               </div>
               <div className="brand-details">
                 <div className="brand-title-wrap">
-                  <h1>{companyName}</h1>
-                  <span className="brand-subbadge">Batteries &amp; Power</span>
+                  <h1 className="brand-company-title">{companyName}</h1>
                 </div>
-                <p className="brand-tagline">Manufacturers of Premium Lead-Acid &amp; Tubular Batteries</p>
                 <p className="brand-address">{companyAddress}</p>
                 <div className="brand-contact">
                   <span>Phone: {companyPhone}</span>
@@ -370,15 +370,18 @@ export default async function BillPage({
                     ? "SALES TAX INVOICE"
                     : "OFFICIAL PRICE QUOTATION"}
               </div>
-              <div className="invoice-solo">
-                <Image
-                  className="solo-logo"
-                  src="/solo-removebg-preview.png"
-                  alt="SOLO"
-                  width={675}
-                  height={379}
-                />
-                <small>Powered by SOLO Technology</small>
+              <div className="solo-badge-container">
+                <div className="solo-logo-frame">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="solo-logo-img"
+                    src="/solo-removebg-preview.png"
+                    alt="SOLO Batteries"
+                    width={104}
+                    height={48}
+                  />
+                </div>
+                <span className="solo-tagline">Powered by SOLO</span>
               </div>
             </div>
           </header>
@@ -452,44 +455,96 @@ export default async function BillPage({
               ))}
             </tbody>
           </table>
-          <section className="invoice-totals">
-            <dl>
-              <div>
-                <dt>Subtotal</dt>
-                <dd>{formatPKR(bill.subtotal)}</dd>
-              </div>
-              <div>
-                <dt>Tax ({Number(bill.taxRate)}%)</dt>
-                <dd>{formatPKR(bill.taxAmount)}</dd>
-              </div>
-              {Number(bill.shippingAmount) > 0 && (
-                <div>
-                  <dt>Shipping</dt>
-                  <dd>{formatPKR(bill.shippingAmount)}</dd>
+          {/* Executive 2-Column Bottom Section: Bank/Terms on Left, Structured Totals on Right */}
+          <div className="invoice-bottom-grid">
+            <div className="invoice-bottom-left">
+              <div className="invoice-bank-card">
+                <div className="bank-card-header">
+                  <span className="bank-card-title">Bank &amp; Payment Details</span>
                 </div>
-              )}
-              {Number(bill.discountAmount) > 0 && (
-                <div>
-                  <dt>Discount</dt>
-                  <dd>− {formatPKR(bill.discountAmount)}</dd>
+                <div className="bank-card-body">
+                  <div className="bank-detail-row">
+                    <span className="bank-label">Bank:</span>
+                    <strong className="bank-val">Bank Alfalah Ltd / Meezan Bank</strong>
+                  </div>
+                  <div className="bank-detail-row">
+                    <span className="bank-label">Account Title:</span>
+                    <strong className="bank-val">Crown Accumulator</strong>
+                  </div>
+                  <div className="bank-detail-row">
+                    <span className="bank-label">Payment Mode:</span>
+                    <span className="bank-val">Crossed Cheque / Online Transfer / Cash</span>
+                  </div>
                 </div>
-              )}
-              <div className="invoice-total">
-                <dt>Total</dt>
-                <dd>{formatPKR(bill.totalAmount)}</dd>
               </div>
-            </dl>
-          </section>
-          {bill.notes && (
-            <section className="invoice-notes">
-              <strong>Notes / Terms</strong>
-              <p>{bill.notes}</p>
-            </section>
-          )}
-          <footer className="invoice-footer">
-            <p>Prepared by {bill.createdBy}</p>
-            <p>Thank you for your business.</p>
-          </footer>
+
+              <div className="invoice-terms-card">
+                <span className="terms-title">Terms &amp; Conditions</span>
+                <ul className="terms-list">
+                  <li>Payment is due within agreed terms from invoice date.</li>
+                  <li>Warranty claims subject to physical inspection &amp; warranty verification.</li>
+                  <li>Goods once sold will not be returned or exchanged without authorized gate pass.</li>
+                  {bill.notes && (
+                    <li className="custom-note">
+                      <strong>Note:</strong> {bill.notes}
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            <div className="invoice-bottom-right">
+              <div className="invoice-totals-box">
+                <div className="totals-row">
+                  <span className="totals-label">Subtotal</span>
+                  <span className="totals-val">{formatPKR(bill.subtotal)}</span>
+                </div>
+                {Number(bill.taxRate) > 0 && (
+                  <div className="totals-row">
+                    <span className="totals-label">Sales Tax ({Number(bill.taxRate)}%)</span>
+                    <span className="totals-val">{formatPKR(bill.taxAmount)}</span>
+                  </div>
+                )}
+                {Number(bill.shippingAmount) > 0 && (
+                  <div className="totals-row">
+                    <span className="totals-label">Freight / Shipping</span>
+                    <span className="totals-val">{formatPKR(bill.shippingAmount)}</span>
+                  </div>
+                )}
+                {Number(bill.discountAmount) > 0 && (
+                  <div className="totals-row discount">
+                    <span className="totals-label">Special Discount</span>
+                    <span className="totals-val">− {formatPKR(bill.discountAmount)}</span>
+                  </div>
+                )}
+                <div className="totals-row grand-total">
+                  <span className="totals-label">Balance Due</span>
+                  <span className="totals-val">{formatPKR(bill.totalAmount)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Column Formal Signatures & Stamp Block */}
+          <div className="invoice-signatures-block">
+            <div className="sig-col">
+              <span className="sig-person">{bill.createdBy || "System Operator"}</span>
+              <div className="sig-line" />
+              <span className="sig-title">Prepared By</span>
+            </div>
+            <div className="sig-col">
+              <div className="sig-line-empty" />
+              <div className="sig-line" />
+              <span className="sig-title">Customer / Receiver Signature</span>
+            </div>
+            <div className="sig-col stamp-col">
+              <div className="sig-stamp-placeholder">
+                <span className="stamp-text">Official Stamp</span>
+              </div>
+              <div className="sig-line" />
+              <span className="sig-title">Authorized Signatory</span>
+            </div>
+          </div>
         </article>
       )}
     </main>

@@ -43,13 +43,16 @@ export async function generateElementPdf(
   const originalScrollTop = window.scrollY;
   window.scrollTo(0, 0);
 
+  // Apply clean PDF export styles (strips card shadows, borders, rounding, and resets width for A4)
+  element.classList.add("pdf-exporting");
+
   try {
     const canvas = await html2canvas(element, {
       scale: 2, // High resolution for crisp printing
       useCORS: true,
       logging: false,
       backgroundColor: "#ffffff",
-      windowWidth: Math.max(element.scrollWidth, 1024),
+      windowWidth: 794,
     });
 
     const imgData = canvas.toDataURL("image/jpeg", 0.95);
@@ -114,6 +117,7 @@ export async function generateElementPdf(
       fileName: cleanFileName,
     };
   } finally {
+    element.classList.remove("pdf-exporting");
     window.scrollTo(0, originalScrollTop);
   }
 }

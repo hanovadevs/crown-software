@@ -6,12 +6,11 @@ import {
   FileDown,
   Loader2,
   MessageCircle,
-  RefreshCw,
   Send,
   Share2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   normalizeWhatsAppNumber,
   whatsappNativeUrl,
