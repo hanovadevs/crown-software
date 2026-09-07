@@ -332,6 +332,11 @@ export default async function BillPage({
               </div>
             </div>
           </section>
+
+          <div className="document-correction-notice">
+            <span className="notice-tag">Notice</span>
+            <span className="notice-text">If any discrepancy or correction is required, please report within 5 days of receipt.</span>
+          </div>
         </article>
       ) : (
         <article className="invoice-sheet">
@@ -509,6 +514,11 @@ export default async function BillPage({
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="document-correction-notice">
+            <span className="notice-tag">Notice</span>
+            <span className="notice-text">If any discrepancy or correction is required, please report within 5 days of receipt.</span>
           </div>
 
           {/* 3-Column Formal Signatures & Stamp Block */}

@@ -296,6 +296,11 @@ export default async function PrintReportPage({
           </table>
         </div>
 
+        <div className="document-correction-notice">
+          <span className="notice-tag">Notice</span>
+          <span className="notice-text">If any discrepancy or correction is required, please report within 5 days of receipt.</span>
+        </div>
+
         {/* Footer Signatures */}
         <footer className="report-executive-footer">
           <div className="sig-block">

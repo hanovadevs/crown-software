@@ -3054,6 +3054,43 @@ td.amount-cell {
   font-weight: 900;
 }
 
+/* Document Discrepancy / Correction Notice */
+.document-correction-notice {
+  align-items: center;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 3.5px solid #dc2626;
+  border-radius: 4px;
+  color: #991b1b;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  line-height: 1.4;
+  margin: 16px 0 12px;
+  padding: 6px 12px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.notice-tag {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 3px;
+  color: #b91c1c;
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.notice-text {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 /* 3-Column Formal Signatures & Stamp Block */
 .invoice-signatures-block {
   display: grid;
@@ -5703,5 +5740,29 @@ td.amount-cell {
 .pdf-exporting .letterhead-info h1 {
   white-space: nowrap !important;
 }
+
+.pdf-exporting .document-correction-notice {
+  align-items: center !important;
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  border-left: 3.5px solid #dc2626 !important;
+  border-radius: 4px !important;
+  color: #991b1b !important;
+  display: flex !important;
+  font-size: 10.5px !important;
+  margin: 14px 0 8px !important;
+  padding: 5px 10px !important;
+}
+
+.pdf-exporting .notice-tag {
+  background: #fee2e2 !important;
+  border: 1px solid #fca5a5 !important;
+  color: #b91c1c !important;
+}
+
+.pdf-exporting .notice-text {
+  color: #b91c1c !important;
+}
+
 
 

@@ -218,6 +218,11 @@ export default async function GatePassDetailPage({
           </div>
         )}
 
+        <div className="document-correction-notice">
+          <span className="notice-tag">Notice</span>
+          <span className="notice-text">If any discrepancy or correction is required, please report within 5 days of receipt.</span>
+        </div>
+
         {/* Signature Block */}
         <footer className="gp-signatures">
           <div className="gp-sig-cell">
