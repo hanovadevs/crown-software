@@ -91,13 +91,16 @@ export default async function PrintReportPage({
         {/* Letterhead Header */}
         <header className="report-letterhead">
           <div className="letterhead-brand">
-            <Image
-              className="print-brand-logo"
-              src="/CrownAccumulatorbox.jpeg"
-              alt="Crown Accumulator"
-              width={300}
-              height={291}
-            />
+            <div className="brand-logo-frame">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="print-brand-logo"
+                src="/CrownAccumulatorbox.jpeg"
+                alt="Crown Accumulator"
+                width={72}
+                height={72}
+              />
+            </div>
             <div className="letterhead-info">
               <h1>Crown Accumulator</h1>
               <p className="letterhead-address">
@@ -109,12 +112,13 @@ export default async function PrintReportPage({
             </div>
           </div>
           <div className="letterhead-solo">
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               className="solo-logo"
               src="/solo-removebg-preview.png"
               alt="SOLO"
-              width={675}
-              height={379}
+              width={104}
+              height={58}
             />
             <small>Powered by SOLO</small>
           </div>

@@ -113,13 +113,13 @@ export default async function BillPage({
           <header className="tax-letterhead">
             <div className="tax-letterhead-brand">
               <div className="tax-logo-frame">
-                <Image
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   className="tax-brand-logo"
                   src="/CrownAccumulatorbox.jpeg"
                   alt={companyName}
-                  width={300}
-                  height={291}
-                  priority
+                  width={72}
+                  height={72}
                 />
               </div>
               <div className="tax-brand-details">
@@ -338,13 +338,13 @@ export default async function BillPage({
           <header className="invoice-head">
             <div className="invoice-brand">
               <div className="brand-logo-frame">
-                <Image
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   className="print-brand-logo"
                   src="/CrownAccumulatorbox.jpeg"
                   alt={companyName}
-                  width={300}
-                  height={291}
-                  priority
+                  width={72}
+                  height={72}
                 />
               </div>
               <div className="brand-details">
@@ -476,20 +476,6 @@ export default async function BillPage({
                     <span className="bank-val">Crossed Cheque / Online Transfer / Cash</span>
                   </div>
                 </div>
-              </div>
-
-              <div className="invoice-terms-card">
-                <span className="terms-title">Terms &amp; Conditions</span>
-                <ul className="terms-list">
-                  <li>Payment is due within agreed terms from invoice date.</li>
-                  <li>Warranty claims subject to physical inspection &amp; warranty verification.</li>
-                  <li>Goods once sold will not be returned or exchanged without authorized gate pass.</li>
-                  {bill.notes && (
-                    <li className="custom-note">
-                      <strong>Note:</strong> {bill.notes}
-                    </li>
-                  )}
-                </ul>
               </div>
             </div>
 
