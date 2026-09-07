@@ -3808,6 +3808,43 @@ td.amount-cell {
   box-shadow: none;
 }
 
+/* Direct Action Share Modal (iOS Safari & Mobile Web Share) */
+.direct-share-modal-content {
+  max-width: 440px !important;
+}
+
+.whatsapp-ready-badge {
+  background: rgba(32, 184, 90, 0.15) !important;
+  color: #20b85a !important;
+}
+
+.direct-share-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0 14px;
+}
+
+.direct-action-primary {
+  padding: 13px 20px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  justify-content: center !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(32, 184, 90, 0.35) !important;
+}
+
+.direct-share-buttons .button-secondary {
+  justify-content: center !important;
+  padding: 11px 18px !important;
+  font-size: 14px !important;
+  border-radius: 10px !important;
+}
+
+.button-full {
+  width: 100% !important;
+}
+
 @media (max-width: 720px) {
   .backup-overview,
   .restore-fields { grid-template-columns: 1fr; }

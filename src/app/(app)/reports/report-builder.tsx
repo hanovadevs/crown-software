@@ -1,8 +1,7 @@
 "use client";
 
-import { ArrowLeftRight, Banknote, Boxes, Download, FileText, Package, Printer, UserCheck, Users } from "lucide-react";
+import { ArrowLeftRight, Banknote, Boxes, Download, FileText, MessageCircle, Package, Printer, UserCheck, Users } from "lucide-react";
 import { useState } from "react";
-import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { formatPKR } from "@/lib/utils";
 
 const allReports = [
@@ -88,7 +87,7 @@ export function ReportBuilder({ options, userRole }: { options: Options; userRol
           <h2>Export Options</h2>
           <button className="button button-success" formAction="/api/reports/export" type="submit"><Download size={20} /> Download CSV</button>
           <button className="button button-primary" formAction="/reports/print" type="submit"><Printer size={20} /> Print / Save PDF</button>
-          <WhatsAppLedgerButton phone={targetPhone} message={whatsappMessage} label="Send to WhatsApp" triggerPrint={false} />
+          <button className="button whatsapp-button" formAction="/reports/print?autoWhatsApp=1" type="submit"><MessageCircle size={20} /> Send PDF to WhatsApp</button>
           <div className="export-note"><FileText size={18} /> Filters apply to CSV, PDF, and WhatsApp sharing.</div>
         </section>
       </aside>

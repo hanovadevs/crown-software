@@ -25,6 +25,7 @@ export default async function PrintReportPage({
     productId?: string;
     workerId?: string;
     warehouseId?: string;
+    autoWhatsApp?: string;
   }>;
 }) {
   const user = await requireUser();
@@ -82,6 +83,7 @@ export default async function PrintReportPage({
           message={whatsappMessage}
           label="Send to WhatsApp"
           documentName={`${report.title.replace(/\s+/g, "_")}_${party ? party.name.replace(/\s+/g, "_") : "Report"}`}
+          autoTrigger={params.autoWhatsApp === "1"}
         />
       </div>
 

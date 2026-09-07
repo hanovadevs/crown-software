@@ -2,15 +2,17 @@
 
 import {
   Check,
+  Copy,
   Download,
   FileDown,
+  FileText,
   Loader2,
   MessageCircle,
   Send,
   Share2,
   X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   normalizeWhatsAppNumber,
   whatsappNativeUrl,
@@ -22,7 +24,7 @@ import {
   type GeneratedPdfResult,
 } from "@/lib/pdf-generator";
 
-type SendStatus = "idle" | "generating" | "shared" | "downloaded" | "error";
+type SendStatus = "idle" | "generating" | "ready" | "shared" | "downloaded" | "error";
 
 export function WhatsAppLedgerButton({
   phone: initialPhone,
@@ -30,6 +32,7 @@ export function WhatsAppLedgerButton({
   label = "Send to WhatsApp",
   triggerPrint = true,
   documentName,
+  autoTrigger = false,
 }: {
   phone?: string | null;
   message: string;
@@ -38,9 +41,13 @@ export function WhatsAppLedgerButton({
   triggerPrint?: boolean;
   /** Custom document file name (e.g. "INV-2026-0001") */
   documentName?: string;
+  /** When true, initiates generation on mount (e.g. redirected from reports page) */
+  autoTrigger?: boolean;
 }) {
   const [status, setStatus] = useState<SendStatus>("idle");
   const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showDirectShareModal, setShowDirectShareModal] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
   const [customPhone, setCustomPhone] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [lastPdfResult, setLastPdfResult] = useState<GeneratedPdfResult | null>(null);
@@ -127,7 +134,6 @@ export function WhatsAppLedgerButton({
 
         setLastPdfResult(pdfResult);
 
-        // Check if device supports Web Share API with File (Standard on modern Android Chrome & iPhone iOS Safari)
         const canShareFiles =
           typeof navigator !== "undefined" &&
           typeof navigator.share === "function" &&
@@ -136,24 +142,31 @@ export function WhatsAppLedgerButton({
 
         if (canShareFiles) {
           try {
+            // CRITICAL FOR IPHONE (iOS Safari) & ANDROID:
+            // Share ONLY the PDF file in the files array!
+            // DO NOT pass 'text' alongside 'files', because WhatsApp's iOS extension
+            // ignores the file attachment and only pastes the text string when text is provided!
             await navigator.share({
               title: pdfResult.fileName,
-              text: shortMessage,
               files: [pdfResult.file],
             });
             setStatus("shared");
             setTimeout(() => setStatus("idle"), 8000);
             return;
           } catch (shareErr: unknown) {
-            // If user closed or cancelled the share sheet, return to idle
             if (
               shareErr instanceof Error &&
               (shareErr.name === "AbortError" || shareErr.message.includes("canceled"))
             ) {
+              // User explicitly dismissed the native share sheet
               setStatus("idle");
               return;
             }
-            // If share failed with unexpected error, fall through to download + WhatsApp
+            // Safari threw NotAllowedError (user gesture expired during async PDF generation)
+            // Or share failed -> Show the Direct Action Share Modal so the user can tap with fresh gesture!
+            setShowDirectShareModal(true);
+            setStatus("ready");
+            return;
           }
         }
 
@@ -176,10 +189,24 @@ export function WhatsAppLedgerButton({
         setStatus("error");
       }
     },
-    [activePhone, buildFileName, openWhatsAppDirectly, shortMessage, triggerPrint],
+    [activePhone, buildFileName, openWhatsAppDirectly, triggerPrint],
   );
 
+  // Auto-trigger if requested on page mount (e.g. from /reports redirect)
+  useEffect(() => {
+    if (autoTrigger && status === "idle") {
+      const timer = setTimeout(() => {
+        executeSendFlow();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [autoTrigger, executeSendFlow, status]);
+
   const handleClick = () => {
+    if (status === "ready" && lastPdfResult) {
+      handleDirectShare();
+      return;
+    }
     executeSendFlow();
   };
 
@@ -189,9 +216,50 @@ export function WhatsAppLedgerButton({
     }
   };
 
+  const handleDirectShare = async () => {
+    if (!lastPdfResult) return;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        // Direct synchronous user click -> Safari user gesture is 100% active and fresh!
+        // Share ONLY the file so WhatsApp attaches the PDF document!
+        await navigator.share({
+          title: lastPdfResult.fileName,
+          files: [lastPdfResult.file],
+        });
+        setShowDirectShareModal(false);
+        setStatus("shared");
+        setTimeout(() => setStatus("idle"), 8000);
+        return;
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && (e.name === "AbortError" || e.message.includes("canceled"))) {
+        return;
+      }
+    }
+
+    // Fallback if native share was cancelled or failed
+    triggerPdfDownload(lastPdfResult.blob, lastPdfResult.fileName);
+    const norm = normalizeWhatsAppNumber(activePhone);
+    if (norm) openWhatsAppDirectly(norm);
+    setShowDirectShareModal(false);
+    setStatus("downloaded");
+  };
+
   const handleRedownloadPdf = () => {
     if (lastPdfResult) {
       triggerPdfDownload(lastPdfResult.blob, lastPdfResult.fileName);
+    }
+  };
+
+  const handleCopySummary = async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shortMessage);
+        setCopiedText(true);
+        setTimeout(() => setCopiedText(false), 3000);
+      }
+    } catch {
+      // ignore
     }
   };
 
@@ -209,6 +277,11 @@ export function WhatsAppLedgerButton({
           <>
             <Loader2 className="animate-spin" size={17} />
             <span>Generating PDF...</span>
+          </>
+        ) : status === "ready" ? (
+          <>
+            <Share2 size={17} />
+            <span>Share PDF...</span>
           </>
         ) : (
           <>
@@ -273,7 +346,7 @@ export function WhatsAppLedgerButton({
             </div>
             <div className="step-banner-text">
               <strong>Shared via WhatsApp!</strong>
-              <span>The document has been prepared and sent to WhatsApp.</span>
+              <span>The PDF document has been attached and sent to WhatsApp.</span>
             </div>
           </div>
           <button
@@ -319,6 +392,90 @@ export function WhatsAppLedgerButton({
             >
               <X size={14} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Direct Action Share Modal: Specifically fixes iOS Safari gesture timeout */}
+      {showDirectShareModal && lastPdfResult && (
+        <div
+          className="whatsapp-modal-overlay no-print"
+          onClick={() => setShowDirectShareModal(false)}
+        >
+          <div
+            className="whatsapp-modal-content direct-share-modal-content"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="direct-share-title"
+          >
+            <div className="whatsapp-modal-head">
+              <h3 id="direct-share-title">
+                <span className="whatsapp-modal-icon-badge whatsapp-ready-badge">
+                  <FileText size={18} />
+                </span>
+                PDF Ready to Send
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowDirectShareModal(false)}
+                className="whatsapp-modal-close"
+                aria-label="Close modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="whatsapp-modal-desc">
+              Your official PDF (<strong>{lastPdfResult.fileName}</strong>) is ready. Tap below to send the actual file on WhatsApp:
+            </p>
+
+            <div className="direct-share-buttons">
+              <button
+                type="button"
+                className="button whatsapp-button button-full direct-action-primary"
+                onClick={handleDirectShare}
+              >
+                <Share2 size={18} />
+                <span>Share PDF to WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                className="button button-secondary button-full"
+                onClick={() => {
+                  triggerPdfDownload(lastPdfResult.blob, lastPdfResult.fileName);
+                }}
+              >
+                <Download size={16} />
+                <span>Download PDF File</span>
+              </button>
+
+              <button
+                type="button"
+                className="button button-secondary button-full"
+                onClick={handleCopySummary}
+              >
+                {copiedText ? (
+                  <>
+                    <Check size={16} style={{ color: "#10b981" }} />
+                    <span>Summary Text Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} />
+                    <span>Copy Summary Text</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="whatsapp-modal-steps">
+              <div className="step-item">
+                <Share2 size={16} />
+                <span>Tap <strong>WhatsApp</strong> in your phone&apos;s share sheet to attach the PDF</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -380,7 +537,7 @@ export function WhatsAppLedgerButton({
             <div className="whatsapp-modal-steps">
               <div className="step-item">
                 <Share2 size={16} />
-                <span>On Android &amp; iPhone: Shares the PDF directly into WhatsApp</span>
+                <span>On Android &amp; iPhone: Attaches the PDF directly into WhatsApp</span>
               </div>
               <div className="step-item">
                 <FileDown size={16} />
