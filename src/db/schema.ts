@@ -235,7 +235,7 @@ export const products = pgTable(
     sku: varchar("sku", { length: 80 }).notNull(),
     name: varchar("name", { length: 200 }).notNull(),
     category: varchar("category", { length: 120 }),
-    brand: varchar("brand", { length: 120 }).notNull().default("Crown"),
+    brand: varchar("brand", { length: 120 }).notNull().default("SOLO"),
     unit: varchar("unit", { length: 40 }).notNull().default("Pieces"),
     description: text("description"),
     salePrice: numeric("sale_price", { precision: 18, scale: 2 })

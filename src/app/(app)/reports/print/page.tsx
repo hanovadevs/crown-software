@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { requireUser } from "@/lib/auth";
@@ -88,39 +87,16 @@ export default async function PrintReportPage({
       </div>
 
       <article className="printable-report executive-report-sheet">
-        {/* Letterhead Header */}
-        <header className="report-letterhead">
-          <div className="letterhead-brand">
-            <div className="brand-logo-frame">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                className="print-brand-logo"
-                src="/CrownAccumulatorbox.jpeg"
-                alt="Crown Accumulator"
-                width={72}
-                height={72}
-              />
-            </div>
-            <div className="letterhead-info">
-              <h1>Crown Accumulator</h1>
-              <p className="letterhead-address">
-                55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore
-              </p>
-              <p className="letterhead-contact">
-                Phone: +92 300 1234567 · NTN: 1234567-8 · Battery Management System
-              </p>
-            </div>
-          </div>
-          <div className="letterhead-solo">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="solo-logo"
-              src="/solo-removebg-preview.png"
-              alt="SOLO"
-              width={104}
-              height={58}
-            />
-            <small>Powered by SOLO</small>
+        {/* Simple text-only header for reports (no logos) */}
+        <header className="report-text-header">
+          <div className="report-header-left">
+            <h1 className="report-company-name">CROWN ACCUMULATOR</h1>
+            <p className="report-company-address">
+              55/28-C, Akbar Colony, Mominpura Road, Daroghawala, Lahore
+            </p>
+            <p className="report-company-contact">
+              Phone: +92 300 1234567 · NTN: 1234567-8
+            </p>
           </div>
         </header>
 

@@ -250,7 +250,7 @@ function productFormValue(formData: FormData) {
     name: formData.get("name"),
     sku: formData.get("sku"),
     category: formData.get("category"),
-    brand: formData.get("brand") || "Crown",
+    brand: formData.get("brand") || "SOLO",
     unit: formData.get("unit") || "Pieces",
     description: formData.get("description"),
     salePrice: formData.get("salePrice") ?? "0",

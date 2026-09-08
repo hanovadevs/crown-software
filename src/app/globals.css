@@ -4891,6 +4891,42 @@ td.amount-cell {
   text-transform: uppercase;
 }
 
+/* Text-only report header (no logos) */
+.report-text-header {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+}
+
+.report-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.report-company-name {
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  line-height: 1.15;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.report-company-address {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 2px 0 0;
+}
+
+.report-company-contact {
+  color: #64748b;
+  font-size: 11px;
+  margin: 1px 0 0 0;
+}
+
 .report-divider {
   height: 3px;
   background: linear-gradient(90deg, #4169f6 0%, #13b8d3 100%);

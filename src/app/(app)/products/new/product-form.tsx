@@ -51,8 +51,8 @@ export function ProductForm({ product }: { product?: ProductValue }) {
         </div>
         <div className="field">
           <label htmlFor="brand">Brand</label>
-          <select className="select" defaultValue={product?.brand ?? "Crown"} id="brand" name="brand">
-            <option>Crown</option><option>SOLO</option><option>Raw Material</option><option>Other</option>
+          <select className="select" defaultValue={product?.brand ?? "SOLO"} id="brand" name="brand">
+            <option>SOLO</option><option>AS</option><option>Super Shalimar</option><option>Shalimar GRAY</option><option>Khyber</option><option>Raw Material</option><option>Other</option>
           </select>
         </div>
         <div className="field">

@@ -181,9 +181,9 @@ async function seed() {
         .values([
           {
             sku: "CR-12V-100",
-            name: "Crown Battery 12V 100Ah",
+            name: "AS Battery 12V 100Ah",
             category: "Batteries",
-            brand: "Crown",
+            brand: "AS",
             unit: "Pieces",
             salePrice: "25999",
             purchasePrice: "22000",
