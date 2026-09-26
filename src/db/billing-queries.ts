@@ -9,7 +9,7 @@ export async function getBillFormOptions() {
     db
       .select({ id: parties.id, name: parties.name, taxNumber: parties.taxNumber, phone: parties.phone, address: parties.address })
       .from(parties)
-      .where(eq(parties.isCustomer, true))
+      .where(and(eq(parties.isCustomer, true), eq(parties.isActive, true)))
       .orderBy(parties.name),
     db
       .select({
@@ -29,9 +29,14 @@ export async function getBill(id: string) {
   const [bill] = await db
     .select({
       id: bills.id,
+      partyId: bills.partyId,
       billNumber: bills.billNumber,
       type: bills.type,
       status: bills.status,
+      postedTransactionId: bills.postedTransactionId,
+      paidReceiptAmount: sql<string>`(SELECT COALESCE(SUM(t.total_amount), 0) FROM transactions t
+        WHERE t.party_id = ${bills.partyId} AND t.reference = ${bills.billNumber}
+          AND t.type = 'customer_receipt' AND t.status = 'posted')`,
       billDate: bills.billDate,
       dueDate: bills.dueDate,
       supplierNtn: bills.supplierNtn,
@@ -67,6 +72,7 @@ export async function getBill(id: string) {
   const items = await db
     .select({
       id: billItems.id,
+      productId: billItems.productId,
       description: billItems.description,
       quantity: billItems.quantity,
       unitPrice: billItems.unitPrice,
@@ -121,4 +127,17 @@ export async function listBills(search = "", type = "all") {
     .limit(100);
 
   return billList;
+}
+
+export async function getBillsSummary() {
+  const [summary] = await db.select({
+    documentCount: sql<string>`COUNT(*)`,
+    invoicedAmount: sql<string>`COALESCE(SUM(${bills.totalAmount}) FILTER (WHERE ${bills.type} <> 'quotation' AND ${bills.status} <> 'cancelled'), 0)`,
+    taxInvoiceCount: sql<string>`COUNT(*) FILTER (WHERE ${bills.type} = 'tax_invoice' AND ${bills.status} <> 'cancelled')`,
+  }).from(bills);
+  return {
+    documentCount: Number(summary.documentCount),
+    invoicedAmount: summary.invoicedAmount,
+    taxInvoiceCount: Number(summary.taxInvoiceCount),
+  };
 }

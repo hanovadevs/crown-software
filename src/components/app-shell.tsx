@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Banknote,
   Bell,
   Boxes,
   ChevronLeft,
@@ -322,4 +321,3 @@ export function AppShell({
     </div>
   );
 }
-

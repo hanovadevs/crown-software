@@ -5,15 +5,10 @@ import {
   ArrowUpRight,
   Calendar,
   ClipboardCheck,
-  FileCheck,
   Package,
   Plus,
   ShieldCheck,
   Trash2,
-  Truck,
-  UserCheck,
-  User,
-  Phone,
 } from "lucide-react";
 import { useActionState, useRef, useState } from "react";
 import { createGatePassAction } from "@/app/actions/gate-pass";

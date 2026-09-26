@@ -86,8 +86,8 @@ export default async function PartiesPage({
                     </Link>
                     <DeleteButton
                       action={deletePartyAction.bind(null, party.id)}
-                      confirmMessage={`Delete ${party.name}? Its bills, transactions, stock movements, and ledger entries will also be removed.`}
-                      label={`Delete ${party.name}`}
+                      confirmMessage={`Archive ${party.name}? Historical transactions and bills will be kept.`}
+                      label={`Archive ${party.name}`}
                     />
                   </div>
                 </div>

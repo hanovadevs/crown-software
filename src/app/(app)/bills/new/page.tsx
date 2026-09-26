@@ -30,8 +30,8 @@ export default async function NewBillPage({
   return (
     <main className="page">
       <PageHeader
-        title={initialBillData ? `Regenerate Bill (Based on ${initialBillData.bill.billNumber})` : "Generate Bill"}
-        description="Create commercial invoices, quotations, and official sales tax documents"
+        title={initialBillData ? `New Bill Based on ${initialBillData.bill.billNumber}` : "Generate Bill"}
+        description="Issuing an invoice posts the customer sale and deducts linked product stock. Quotations do not post; record payments in Transactions."
       />
       <BillForm {...options} today={todayInKarachi()} initialBillData={initialBillData} />
     </main>

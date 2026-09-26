@@ -156,18 +156,18 @@ export default async function TransactionsPage({
                           >
                             <Eye size={18} />
                           </Link>
-                          <Link
+                          {item.status === "posted" && <Link
                             className="small-icon-button"
                             href={`/transactions/${item.id}/edit`}
                             aria-label={`Edit ${item.number}`}
                           >
                             <Pencil size={17} />
-                          </Link>
-                          <DeleteButton
+                          </Link>}
+                          {item.status === "posted" && <DeleteButton
                             action={deleteTransactionAction.bind(null, item.id)}
-                            confirmMessage={`Delete ${item.number}? Stock, balances, and journal entries will be updated globally.`}
-                            label={`Delete ${item.number}`}
-                          />
+                            confirmMessage={`Reverse ${item.number}? A dated reversal will offset its stock and journal entries.`}
+                            label={`Reverse ${item.number}`}
+                          />}
                         </div>
                       </td>
                     </tr>

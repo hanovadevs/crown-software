@@ -2,10 +2,14 @@
 
 import { FileText, PackagePlus, Plus, Printer, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createBillAction } from "@/app/actions/billing";
 import type { FormState } from "@/app/actions/business";
 import { formatPKR } from "@/lib/utils";
+import { calculateBillTotals } from "@/lib/accounting";
+import type { getBill } from "@/db/billing-queries";
+
+type InitialBillData = NonNullable<Awaited<ReturnType<typeof getBill>>>;
 
 type ProductOption = {
   id: string;
@@ -32,13 +36,13 @@ export function BillForm({
   customers: Array<{ id: string; name: string; taxNumber?: string | null }>;
   products: ProductOption[];
   today: string;
-  initialBillData?: any;
+  initialBillData?: InitialBillData | null;
 }) {
   const [state, action, pending] = useActionState(createBillAction, initialState);
   const nextKey = useRef(initialBillData?.items?.length ? initialBillData.items.length + 1 : 2);
   const [items, setItems] = useState<BillItem[]>(() => {
     if (initialBillData?.items?.length) {
-      return initialBillData.items.map((item: any, idx: number) => ({
+      return initialBillData.items.map((item, idx: number) => ({
         key: idx + 1,
         productId: item.productId || "",
         description: item.description || "",
@@ -59,28 +63,21 @@ export function BillForm({
   const [supplierNtn, setSupplierNtn] = useState(initialBillData?.bill?.supplierNtn || "1234567-8");
   const [buyerNtn, setBuyerNtn] = useState(initialBillData?.bill?.buyerNtn || "");
   const [timeOfSupply, setTimeOfSupply] = useState(initialBillData?.bill?.timeOfSupply || "10:30 AM");
-  const [termsOfSales, setTermsOfSales] = useState(initialBillData?.bill?.termsOfSales || "Cash");
+  const [termsOfSales, setTermsOfSales] = useState(initialBillData?.bill?.termsOfSales || "Payment due");
   const [shipping, setShipping] = useState(initialBillData?.bill?.shippingAmount || "0");
   const [discount, setDiscount] = useState(initialBillData?.bill?.discountAmount || "0");
-
-  const subtotal = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) =>
-          sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
-        0,
-      ),
-    [items],
-  );
 
   const isTaxInvoice = billType === "tax_invoice";
   const effectiveTaxRate = Number(taxRate) || 0;
   const effectiveSedRate = isTaxInvoice ? (Number(sedRate) || 0) : 0;
-
-  const salesTaxAmount = subtotal * (effectiveTaxRate / 100);
-  const sedAmount = subtotal * (effectiveSedRate / 100);
-  const total =
-    subtotal + salesTaxAmount + sedAmount + (Number(shipping) || 0) - (Number(discount) || 0);
+  const calculated = calculateBillTotals(
+    items.map((item) => ({ quantity: Number(item.quantity) || 0, unitPrice: Number(item.unitPrice) || 0 })),
+    effectiveTaxRate,
+    effectiveSedRate,
+    Number(shipping) || 0,
+    Number(discount) || 0,
+  );
+  const { subtotal, salesTaxAmount, sedAmount, total } = calculated;
 
   function handleTypeChange(newType: "invoice" | "quotation" | "tax_invoice") {
     setBillType(newType);
@@ -256,10 +253,7 @@ export function BillForm({
           </div>
           <div className="bill-items">
             {items.map((item, index) => {
-              const baseVal = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
-              const stVal = baseVal * (effectiveTaxRate / 100);
-              const sedVal = baseVal * (effectiveSedRate / 100);
-              const lineTotal = baseVal + stVal + sedVal;
+              const lineTotal = calculated.lines[index].lineTotal;
 
               return (
                 <article className="bill-item" key={item.key}>
@@ -460,7 +454,7 @@ export function BillForm({
             type="submit"
           >
             <Printer size={20} />
-            {pending ? "Generating…" : "Generate & Print Invoice"}
+            {pending ? "Issuing…" : billType === "quotation" ? "Create Quotation" : "Issue Invoice & Post Sale"}
           </button>
           <Link className="button button-secondary bill-cancel" href="/dashboard">
             Cancel
@@ -471,6 +465,7 @@ export function BillForm({
           <p>• Fixed sequential numbering (INV, QTN, STI) auto-increments with zero duplication.</p>
           <p>• Select &quot;Sales Tax / S.E.D. Invoice&quot; to print official tax documents.</p>
           <p>• Automatic S.T. & S.E.D. rate breakdown per paper tax format.</p>
+          <p>• Issued invoices post a credit sale and deduct selected product stock. Record a customer receipt separately when payment arrives.</p>
         </section>
       </aside>
     </form>

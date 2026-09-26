@@ -55,6 +55,7 @@ npm run build
 npm run db:generate
 npm run db:migrate
 npm run db:prisma:pull
+npm run audit:accounting
 npm run db:studio
 npm run db:studio:drizzle
 docker compose ps
@@ -86,11 +87,18 @@ for another installation set `POSTGRES_BIN` to its `bin` directory.
 - Party customer and supplier roles are independent booleans with a database
   constraint requiring at least one role.
 - Every posted financial transaction creates balanced debit and credit lines.
-- Stock is derived from immutable inventory movements.
+- Only credit sales and purchases change party receivables or payables; cash, bank, and cheque sales and purchases settle immediately.
+- Purchases without a tracked product are expensed; purchases with a product increase inventory.
+- The dashboard cash and bank balance includes settled sales, purchases, receipts, supplier payments, and worker salary payments. Payroll currently posts against the default cash account.
+- Stock is calculated from inventory movements.
 - Sales are rejected when the selected warehouse has insufficient stock.
-- Posted transactions are designed to be reversed rather than hard deleted.
+- Posted transactions are reversed with offsetting stock and journal entries rather than hard deleted. Only description and reference can be edited on a posted transaction; financial corrections require reversal and a new posting. Parties and products are archived without erasing financial history.
+- Workers are archived without deleting payroll. Editing or reversing a paid salary keeps dated reversing journal entries and the audit trail.
+- Issuing a new invoice or tax invoice posts one credit sale, balanced receivable/revenue/tax journal lines, and stock movements for linked products. A quotation does not post. Record customer receipts in Transactions with the invoice number as reference before marking it paid. Cancelling an unpaid posted invoice reverses its sale, journal, and stock. Older invoices remain unlinked until manually reconciled to avoid duplicate sales.
 - Sequential document numbers are generated atomically in PostgreSQL.
 - All business dates display in the `Asia/Karachi` timezone.
+
+`npm run audit:accounting` reads the configured database without changing it and reports party, cash, and payroll journal differences, unbalanced journal entries, bill total mismatches, bank payments without an account, issued invoices without a linked sale, negative stock, and older custom purchases booked to inventory without stock. Use `-- --detailed` for transaction and invoice detail. Add real bank accounts in Settings before recording new bank payments. Reconcile old unlinked invoices and bank payments against source documents before changing their postings.
 
 ## Logos
 

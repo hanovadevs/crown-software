@@ -18,6 +18,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
+    "audit:accounting": "tsx scripts/audit-accounting.ts",
     "db:prisma:pull": "prisma db pull",
     "db:studio": "prisma studio --port 5555",
     "db:studio:drizzle": "drizzle-kit studio"

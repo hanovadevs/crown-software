@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Factory, Play, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Factory, Play } from "lucide-react";
 import { useActionState, useState } from "react";
 import type { FormState } from "@/app/actions/business";
 import { postProductionRunAction } from "@/app/actions/production";

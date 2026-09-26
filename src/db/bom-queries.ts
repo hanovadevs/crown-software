@@ -1,8 +1,8 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from ".";
-import { billOfMaterialItems, billsOfMaterials, products, warehouses, workOrders } from "./schema";
+import { billOfMaterialItems, billsOfMaterials, products, warehouses } from "./schema";
 
 export async function listBoms() {
   const boms = await db

@@ -8,26 +8,22 @@ import { db } from "@/db";
 import { nextDocumentNumber } from "@/db/documents";
 import {
   auditLogs,
-  billOfMaterialItems,
-  billItems,
-  billsOfMaterials,
+  bankAccounts,
   bills,
-  gatePasses,
-  gatePassItems,
+  billOfMaterialItems,
+  billsOfMaterials,
   inventoryMovements,
   journalEntries,
   journalLines,
   ledgerAccounts,
   parties,
   products,
-  qualityChecks,
   transactions,
   warehouses,
   workers,
-  workerPayments,
-  workOrders,
 } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { hasPrecision, productTotal } from "@/lib/accounting";
 
 export type FormState = {
   error?: string;
@@ -45,7 +41,7 @@ const optionalString = z.preprocess(
 const optionalMoney = z
   .union([z.string(), z.number()])
   .transform((value) => (value === "" ? 0 : Number(value)))
-  .pipe(z.number().nonnegative());
+  .pipe(z.number().finite().nonnegative());
 
 function canEdit(role: string) {
   return role !== "viewer";
@@ -196,31 +192,30 @@ export async function deletePartyAction(partyId: string) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("You do not have editing permission.");
   await db.transaction(async (tx) => {
-    const related = await tx.select({ id: transactions.id }).from(transactions).where(eq(transactions.partyId, partyId));
-    for (const item of related) await deleteTransactionRecords(tx, item.id);
-    const relatedBills = await tx.select({ id: bills.id }).from(bills).where(eq(bills.partyId, partyId));
-    if (relatedBills.length) {
-      await tx.delete(billItems).where(inArray(billItems.billId, relatedBills.map((item) => item.id)));
-      await tx.delete(bills).where(eq(bills.partyId, partyId));
+    await tx.execute(sql`SELECT id FROM parties WHERE id = ${partyId} FOR UPDATE`);
+    const [party] = await tx.select().from(parties).where(eq(parties.id, partyId)).limit(1);
+    if (!party || !party.isActive) return;
+    const result = await tx.execute(sql`
+      SELECT
+        ${party.openingReceivable}::numeric
+          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'sale' AND status = 'posted' AND payment_method = 'credit'), 0)
+          - COALESCE(SUM(total_amount) FILTER (WHERE type = 'customer_receipt' AND status = 'posted'), 0) AS receivable,
+        ${party.openingPayable}::numeric
+          + COALESCE(SUM(total_amount) FILTER (WHERE type = 'purchase' AND status = 'posted' AND payment_method = 'credit'), 0)
+          - COALESCE(SUM(total_amount) FILTER (WHERE type = 'supplier_payment' AND status = 'posted'), 0) AS payable
+      FROM transactions WHERE party_id = ${partyId}
+    `);
+    const balance = result.rows[0] as { receivable: string; payable: string };
+    if (Number(balance.receivable) !== 0 || Number(balance.payable) !== 0) {
+      throw new Error("Settle the party receivable and payable before archiving.");
     }
-    await tx.update(gatePasses).set({ partyId: null }).where(eq(gatePasses.partyId, partyId));
-    await tx.delete(journalLines).where(eq(journalLines.partyId, partyId));
-    await tx.delete(parties).where(eq(parties.id, partyId));
-    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "party", entityId: partyId });
-    await tx.execute(
-      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
-        entity: "party",
-        action: "deleted",
-        id: partyId,
-      })})`,
-    );
+    await tx.update(parties).set({ isActive: false, updatedAt: new Date() }).where(eq(parties.id, partyId));
+    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "party", entityId: partyId, oldValues: { name: party.name } });
+    await tx.execute(sql`SELECT pg_notify('crown_updates', ${JSON.stringify({ entity: "party", action: "archived", id: partyId })})`);
   });
   revalidatePath("/parties");
   revalidatePath("/dashboard");
   revalidatePath("/reports");
-  revalidatePath("/transactions");
-  revalidatePath("/bills");
-  revalidatePath("/gate-pass");
   redirect("/parties");
 }
 
@@ -372,91 +367,27 @@ export async function updateProductAction(
 export async function deleteProductAction(productId: string) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("You do not have editing permission.");
-
   await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM products WHERE id = ${productId} FOR UPDATE`);
     const [product] = await tx.select().from(products).where(eq(products.id, productId)).limit(1);
-    if (!product) return;
-
-    const relatedTransactions = await tx
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(eq(transactions.productId, productId));
-    for (const transaction of relatedTransactions) {
-      await deleteTransactionRecords(tx, transaction.id);
-    }
-
-    const remainingMovements = await tx
-      .select({ id: inventoryMovements.id })
-      .from(inventoryMovements)
-      .where(eq(inventoryMovements.productId, productId));
-    if (remainingMovements.length) {
-      const movementIds = remainingMovements.map((movement) => movement.id);
-      const adjustmentEntries = await tx
-        .select({ id: journalEntries.id })
-        .from(journalEntries)
-        .where(
-          and(
-            eq(journalEntries.sourceType, "stock_adjustment"),
-            inArray(journalEntries.sourceId, movementIds),
-          ),
-        );
-      if (adjustmentEntries.length) {
-        const entryIds = adjustmentEntries.map((entry) => entry.id);
-        await tx.delete(journalLines).where(inArray(journalLines.journalEntryId, entryIds));
-        await tx.delete(journalEntries).where(inArray(journalEntries.id, entryIds));
-      }
-      await tx.delete(inventoryMovements).where(eq(inventoryMovements.productId, productId));
-    }
-
-    await tx.update(billItems).set({ productId: null }).where(eq(billItems.productId, productId));
-    await tx.update(gatePassItems).set({ productId: null }).where(eq(gatePassItems.productId, productId));
-
-    const [finishedBoms, materialBoms] = await Promise.all([
-      tx.select({ id: billsOfMaterials.id }).from(billsOfMaterials).where(eq(billsOfMaterials.finishedProductId, productId)),
-      tx.select({ id: billOfMaterialItems.bomId }).from(billOfMaterialItems).where(eq(billOfMaterialItems.materialProductId, productId)),
-    ]);
-    const bomIds = [...new Set([...finishedBoms.map((bom) => bom.id), ...materialBoms.map((bom) => bom.id)])];
-    if (bomIds.length) {
-      const workOrderIds = (
-        await tx.select({ id: workOrders.id }).from(workOrders).where(inArray(workOrders.bomId, bomIds))
-      ).map((order) => order.id);
-      if (workOrderIds.length) {
-        await tx.delete(qualityChecks).where(inArray(qualityChecks.workOrderId, workOrderIds));
-        await tx.delete(workOrders).where(inArray(workOrders.id, workOrderIds));
-      }
-      await tx.delete(billOfMaterialItems).where(inArray(billOfMaterialItems.bomId, bomIds));
-      await tx.delete(billsOfMaterials).where(inArray(billsOfMaterials.id, bomIds));
-    }
-
-    await tx.delete(products).where(eq(products.id, productId));
-    await tx.insert(auditLogs).values({
-      userId: user.id,
-      action: "archive",
-      entityType: "product",
-      entityId: productId,
-      oldValues: {
-        sku: product.sku,
-        name: product.name,
-        removedTransactions: relatedTransactions.length,
-        removedStockMovements: remainingMovements.length,
-        removedManufacturingDefinitions: bomIds.length,
-      },
-    });
-    await tx.execute(
-      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
-        entity: "product",
-        action: "deleted",
-        id: productId,
-      })})`,
-    );
+    if (!product || !product.isActive) return;
+    const [stock] = await tx.select({ quantity: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)` })
+      .from(inventoryMovements).where(eq(inventoryMovements.productId, productId));
+    if (Number(stock?.quantity ?? 0) !== 0) throw new Error("Bring product stock to zero before archiving.");
+    const [usedInBom] = await tx.select({ id: billsOfMaterials.id }).from(billsOfMaterials)
+      .where(and(eq(billsOfMaterials.finishedProductId, productId), eq(billsOfMaterials.isActive, true))).limit(1);
+    const [usedAsMaterial] = await tx.select({ id: billOfMaterialItems.id }).from(billOfMaterialItems)
+      .innerJoin(billsOfMaterials, eq(billOfMaterialItems.bomId, billsOfMaterials.id))
+      .where(and(eq(billOfMaterialItems.materialProductId, productId), eq(billsOfMaterials.isActive, true))).limit(1);
+    if (usedInBom || usedAsMaterial) throw new Error("Remove this product from active bills of materials before archiving.");
+    await tx.update(products).set({ isActive: false, updatedAt: new Date() }).where(eq(products.id, productId));
+    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "product", entityId: productId, oldValues: { sku: product.sku, name: product.name } });
+    await tx.execute(sql`SELECT pg_notify('crown_updates', ${JSON.stringify({ entity: "product", action: "archived", id: productId })})`);
   });
-
   revalidatePath("/products");
   revalidatePath("/stock");
   revalidatePath("/dashboard");
   revalidatePath("/reports");
-  revalidatePath("/bills");
-  revalidatePath("/gate-pass");
   redirect("/products");
 }
 
@@ -474,7 +405,7 @@ const transactionSchema = z.object({
   bankAccountId: optionalString,
   quantity: optionalMoney,
   unitPrice: optionalMoney,
-  totalAmount: z.coerce.number().positive(),
+  totalAmount: z.coerce.number().finite().positive(),
   description: z.string().trim().min(2).max(2000),
   transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   paymentMethod: z.enum(["cash", "bank", "cheque", "credit"]),
@@ -488,22 +419,6 @@ function accountByCode(
   const account = accounts.find((candidate) => candidate.code === code);
   if (!account) throw new Error(`System ledger account ${code} is missing`);
   return account.id;
-}
-
-type CrownDbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-async function deleteTransactionRecords(tx: CrownDbTransaction, transactionId: string) {
-  const entries = await tx
-    .select({ id: journalEntries.id })
-    .from(journalEntries)
-    .where(and(eq(journalEntries.sourceType, "transaction"), eq(journalEntries.sourceId, transactionId)));
-  if (entries.length) {
-    const entryIds = entries.map((entry) => entry.id);
-    await tx.delete(journalLines).where(inArray(journalLines.journalEntryId, entryIds));
-    await tx.delete(journalEntries).where(inArray(journalEntries.id, entryIds));
-  }
-  await tx.delete(inventoryMovements).where(eq(inventoryMovements.transactionId, transactionId));
-  await tx.delete(transactions).where(eq(transactions.id, transactionId));
 }
 
 export async function createTransactionAction(
@@ -547,6 +462,19 @@ export async function createTransactionAction(
   if (value.productId && value.quantity <= 0) {
     return { error: "Quantity must be greater than zero for a product transaction." };
   }
+  if (value.productId && !["sale", "purchase"].includes(value.type)) {
+    return { error: "Only sales and purchases can include a product." };
+  }
+  if (!partyRequired && value.partyId) return { error: "This transaction type cannot include a party." };
+  if (!hasPrecision(value.totalAmount, 2)) return { error: "Amount must have at most two decimal places." };
+  if (value.productId && (
+    !hasPrecision(value.quantity, 3) ||
+    !hasPrecision(value.unitPrice, 2) ||
+    productTotal(value.quantity, value.unitPrice) !== value.totalAmount
+  )) return { error: "Product total must equal quantity × unit price, rounded to two decimal places." };
+  if (["customer_receipt", "supplier_payment"].includes(value.type) && value.paymentMethod === "credit") {
+    return { error: "A receipt or supplier payment needs a cash, bank, or cheque payment method." };
+  }
 
   if (value.partyId) {
     const [party] = await db
@@ -571,6 +499,38 @@ export async function createTransactionAction(
 
   try {
     await db.transaction(async (tx) => {
+      if (value.partyId) {
+        const lockedParty = await tx.execute(sql`SELECT id, is_active, is_customer, is_supplier FROM parties WHERE id = ${value.partyId} FOR UPDATE`);
+        const party = lockedParty.rows[0] as { is_active: boolean; is_customer: boolean; is_supplier: boolean } | undefined;
+        if (!party?.is_active) throw new Error("The selected party is unavailable.");
+        if (["sale", "customer_receipt"].includes(value.type) && !party.is_customer) throw new Error("The selected party is not registered as a customer.");
+        if (["purchase", "supplier_payment"].includes(value.type) && !party.is_supplier) throw new Error("The selected party is not registered as a supplier.");
+      }
+      if (value.type === "sale" && value.reference) {
+        const [issuedBill] = await tx.select({ billNumber: bills.billNumber }).from(bills)
+          .where(and(eq(bills.billNumber, value.reference), eq(bills.partyId, value.partyId!), sql`${bills.postedTransactionId} IS NOT NULL`))
+          .limit(1);
+        if (issuedBill) throw new Error(`Invoice ${issuedBill.billNumber} already records this sale. Record a customer receipt for payment instead.`);
+      }
+      const [cashAccount] = await tx.select({ id: bankAccounts.id }).from(bankAccounts)
+        .where(and(eq(bankAccounts.isActive, true), eq(bankAccounts.isCashAccount, true)))
+        .orderBy(bankAccounts.createdAt, bankAccounts.id).limit(1);
+      const [selectedAccount] = value.bankAccountId
+        ? await tx.select({ id: bankAccounts.id, isCashAccount: bankAccounts.isCashAccount }).from(bankAccounts)
+            .where(and(eq(bankAccounts.id, value.bankAccountId), eq(bankAccounts.isActive, true))).limit(1)
+        : [];
+      if (value.bankAccountId && !selectedAccount) throw new Error("The selected bank account is unavailable.");
+      if (["bank", "cheque"].includes(value.paymentMethod) && (!selectedAccount || selectedAccount.isCashAccount)) {
+        throw new Error("Select an active bank account for bank or cheque payments.");
+      }
+      if (bankRequired && !selectedAccount) throw new Error("Select an active cash or bank account.");
+      const paymentMethod = bankRequired
+        ? selectedAccount!.isCashAccount ? "cash" : "bank"
+        : value.paymentMethod;
+      const bankAccountId = bankRequired || ["bank", "cheque"].includes(paymentMethod)
+        ? selectedAccount!.id
+        : paymentMethod === "cash" ? cashAccount?.id : null;
+      if (paymentMethod === "cash" && !bankAccountId) throw new Error("No active cash account is configured.");
       const [defaultWarehouse] = await tx
         .select({ id: warehouses.id })
         .from(warehouses)
@@ -582,6 +542,7 @@ export async function createTransactionAction(
         | { id: string; purchasePrice: string; name: string; isSellable: boolean; isPurchasable: boolean }
         | undefined;
       if (value.productId) {
+        await tx.execute(sql`SELECT id FROM products WHERE id = ${value.productId} FOR UPDATE`);
         [selectedProduct] = await tx
           .select({
             id: products.id,
@@ -632,12 +593,12 @@ export async function createTransactionAction(
           type: value.type,
           partyId: value.partyId,
           productId: value.productId,
-          bankAccountId: value.bankAccountId,
+          bankAccountId,
           warehouseId: defaultWarehouse.id,
           quantity: value.productId ? value.quantity.toFixed(3) : null,
           unitPrice: value.productId ? value.unitPrice.toFixed(2) : null,
           totalAmount: value.totalAmount.toFixed(2),
-          paymentMethod: value.paymentMethod,
+          paymentMethod,
           description: value.description,
           reference: value.reference,
           transactionDate: value.transactionDate,
@@ -712,16 +673,16 @@ export async function createTransactionAction(
       const base = {
         journalEntryId: entry.id,
         partyId: value.partyId,
-        bankAccountId: value.bankAccountId,
+        bankAccountId,
       };
 
-      const cashOrBank = value.paymentMethod === "credit" ? cash : (value.bankAccountId ? cash : cash);
+      const cashOrBank = cash;
 
       if (value.type === "sale") {
         lines.push(
           {
             ...base,
-            accountId: value.paymentMethod === "credit" ? receivable : cashOrBank,
+            accountId: paymentMethod === "credit" ? receivable : cashOrBank,
             side: "debit",
             amount,
           },
@@ -748,10 +709,10 @@ export async function createTransactionAction(
         }
       } else if (value.type === "purchase") {
         lines.push(
-          { ...base, accountId: inventory, side: "debit", amount },
+          { ...base, accountId: selectedProduct ? inventory : costOfGoods, side: "debit", amount },
           {
             ...base,
-            accountId: value.paymentMethod === "credit" ? payable : cashOrBank,
+            accountId: paymentMethod === "credit" ? payable : cashOrBank,
             side: "credit",
             amount,
           },
@@ -804,7 +765,9 @@ export async function createTransactionAction(
       (error.message.includes("Insufficient stock") ||
         error.message.includes("unavailable") ||
         error.message.includes("warehouse") ||
-        error.message.includes("not marked"))
+        error.message.includes("not marked") ||
+        error.message.includes("not registered") ||
+        error.message.includes("account"))
     ) {
       return { error: error.message };
     }
@@ -943,22 +906,16 @@ export async function deleteWorkerAction(workerId: string) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("You do not have editing permission.");
   await db.transaction(async (tx) => {
-    const paymentIds = (await tx.select({ id: workerPayments.id }).from(workerPayments).where(eq(workerPayments.workerId, workerId))).map((payment) => payment.id);
-    if (paymentIds.length) {
-      const entryIds = (await tx.select({ id: journalEntries.id }).from(journalEntries)
-        .where(and(eq(journalEntries.sourceType, "worker_payment"), inArray(journalEntries.sourceId, paymentIds)))).map((entry) => entry.id);
-      if (entryIds.length) {
-        await tx.delete(journalLines).where(inArray(journalLines.journalEntryId, entryIds));
-        await tx.delete(journalEntries).where(inArray(journalEntries.id, entryIds));
-      }
-    }
-    await tx.delete(workerPayments).where(eq(workerPayments.workerId, workerId));
-    await tx.delete(workers).where(eq(workers.id, workerId));
-    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "worker", entityId: workerId });
+    await tx.execute(sql`SELECT id FROM workers WHERE id = ${workerId} FOR UPDATE`);
+    const [worker] = await tx.select().from(workers).where(eq(workers.id, workerId)).limit(1);
+    if (!worker || worker.status === "inactive") return;
+    await tx.update(workers).set({ status: "inactive", updatedAt: new Date() }).where(eq(workers.id, workerId));
+    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "worker", entityId: workerId,
+      oldValues: { status: worker.status }, newValues: { status: "inactive" } });
     await tx.execute(
       sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
         entity: "worker",
-        action: "deleted",
+        action: "archived",
         id: workerId,
       })})`,
     );
@@ -973,28 +930,107 @@ export async function deleteTransactionAction(transactionId: string) {
   const user = await requireUser();
   if (!canEdit(user.role)) throw new Error("You do not have editing permission.");
   await db.transaction(async (tx) => {
-    await deleteTransactionRecords(tx, transactionId);
-    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "transaction", entityId: transactionId });
-    await tx.execute(
-      sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
-        entity: "transaction",
-        action: "deleted",
-        id: transactionId,
-      })})`,
-    );
+    await tx.execute(sql`SELECT id FROM transactions WHERE id = ${transactionId} FOR UPDATE`);
+    const [original] = await tx.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+    if (!original) throw new Error("Transaction no longer exists.");
+    const [linkedBill] = await tx.select({ billNumber: bills.billNumber }).from(bills).where(eq(bills.postedTransactionId, transactionId)).limit(1);
+    if (linkedBill) throw new Error(`Cancel invoice ${linkedBill.billNumber} to reverse its sale and stock together.`);
+    if (original.status !== "posted") throw new Error("Only posted transactions can be reversed.");
+
+    const movements = await tx.select().from(inventoryMovements).where(eq(inventoryMovements.transactionId, transactionId));
+    for (const productId of [...new Set(movements.map((movement) => movement.productId))].sort()) {
+      await tx.execute(sql`SELECT id FROM products WHERE id = ${productId} FOR UPDATE`);
+    }
+    for (const movement of movements) {
+      if (Number(movement.quantityDelta) > 0) {
+        const [stock] = await tx.select({ quantity: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)` })
+          .from(inventoryMovements)
+          .where(and(eq(inventoryMovements.productId, movement.productId), eq(inventoryMovements.warehouseId, movement.warehouseId)));
+        if (Number(stock?.quantity ?? 0) < Number(movement.quantityDelta)) {
+          throw new Error("Cannot reverse this purchase because its stock has already been used.");
+        }
+      }
+      await tx.insert(inventoryMovements).values({
+        productId: movement.productId,
+        warehouseId: movement.warehouseId,
+        transactionId,
+        movementType: Number(movement.quantityDelta) < 0 ? "return_in" : "return_out",
+        quantityDelta: (-Number(movement.quantityDelta)).toFixed(3),
+        unitCost: movement.unitCost,
+        reference: `REV-${original.transactionNumber}`,
+        notes: `Reversal of ${original.transactionNumber}`,
+        createdBy: user.id,
+      });
+    }
+
+    const [entry] = await tx.select().from(journalEntries)
+      .where(and(eq(journalEntries.sourceType, "transaction"), eq(journalEntries.sourceId, transactionId))).limit(1);
+    if (!entry) throw new Error("The transaction journal entry is missing.");
+    const originalLines = await tx.select().from(journalLines).where(eq(journalLines.journalEntryId, entry.id));
+    if (!originalLines.length) throw new Error("The transaction journal lines are missing.");
+    const reversalDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const [reversal] = await tx.insert(journalEntries).values({
+      entryNumber: await nextDocumentNumber(
+        tx as unknown as Parameters<typeof nextDocumentNumber>[0],
+        "journal", "JRN", new Date(`${reversalDate}T00:00:00+05:00`),
+      ),
+      entryDate: reversalDate,
+      description: `Reversal of ${original.transactionNumber}: ${original.description}`,
+      sourceType: "transaction_reversal",
+      sourceId: transactionId,
+      reversalOfId: entry.id,
+      createdBy: user.id,
+    }).returning({ id: journalEntries.id });
+    await tx.insert(journalLines).values(originalLines.map((line) => ({
+      journalEntryId: reversal.id,
+      accountId: line.accountId,
+      partyId: line.partyId,
+      bankAccountId: line.bankAccountId,
+      side: line.side === "debit" ? "credit" as const : "debit" as const,
+      amount: line.amount,
+      memo: `Reversal of ${original.transactionNumber}`,
+    })));
+    await tx.update(transactions).set({ status: "reversed", updatedAt: new Date(), version: sql`${transactions.version} + 1` })
+      .where(eq(transactions.id, transactionId));
+    if (original.type === "customer_receipt" && original.reference && original.partyId) {
+      const [linkedBill] = await tx.select().from(bills).where(and(
+        eq(bills.billNumber, original.reference), eq(bills.partyId, original.partyId), eq(bills.status, "paid"),
+        sql`${bills.postedTransactionId} IS NOT NULL`,
+      )).limit(1);
+      if (linkedBill) {
+        const [remaining] = await tx.select({ amount: sql<string>`COALESCE(SUM(${transactions.totalAmount}), 0)` })
+          .from(transactions).where(and(
+            eq(transactions.type, "customer_receipt"), eq(transactions.status, "posted"),
+            eq(transactions.partyId, original.partyId), eq(transactions.reference, original.reference),
+          ));
+        if (Number(remaining?.amount ?? 0) < Number(linkedBill.totalAmount)) {
+          await tx.update(bills).set({ status: "issued", updatedAt: new Date() }).where(eq(bills.id, linkedBill.id));
+        }
+      }
+    }
+    await tx.insert(auditLogs).values({
+      userId: user.id, action: "reverse", entityType: "transaction", entityId: transactionId,
+      oldValues: { status: original.status, amount: original.totalAmount },
+      newValues: { status: "reversed", reversalJournalId: reversal.id },
+    });
+    await tx.execute(sql`SELECT pg_notify('crown_updates', ${JSON.stringify({ entity: "transaction", action: "reversed", id: transactionId })})`);
   });
   revalidatePath("/transactions");
+  revalidatePath(`/transactions/${transactionId}`);
   revalidatePath("/dashboard");
   revalidatePath("/parties");
   revalidatePath("/stock");
   revalidatePath("/reports");
-  redirect("/transactions");
+  revalidatePath("/bills");
+  redirect(`/transactions/${transactionId}`);
 }
 
 const transactionEditSchema = z.object({
   quantity: optionalMoney,
   unitPrice: optionalMoney,
-  totalAmount: z.coerce.number().positive(),
+  totalAmount: z.coerce.number().finite().positive(),
   description: z.string().trim().min(2).max(2000),
   transactionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reference: optionalString,
@@ -1018,93 +1054,43 @@ export async function updateTransactionAction(
   if (!parsed.success) return validationState(parsed.error);
   const value = parsed.data;
 
+  if (!hasPrecision(value.totalAmount, 2)) return { error: "Amount must have at most two decimal places." };
+
   try {
     await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM transactions WHERE id = ${transactionId} FOR UPDATE`);
       const [existing] = await tx.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
       if (!existing) throw new Error("Transaction no longer exists.");
-      if (existing.productId && value.quantity <= 0) throw new Error("Quantity must be greater than zero.");
-
-      const [product] = existing.productId
-        ? await tx.select({ purchasePrice: products.purchasePrice }).from(products).where(eq(products.id, existing.productId)).limit(1)
-        : [];
-      const [movement] = await tx.select().from(inventoryMovements).where(eq(inventoryMovements.transactionId, transactionId)).limit(1);
-      if (existing.type === "sale" && existing.productId && existing.warehouseId) {
-        const [stockResult] = await tx.select({ stock: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)` })
-          .from(inventoryMovements)
-          .where(and(eq(inventoryMovements.productId, existing.productId), eq(inventoryMovements.warehouseId, existing.warehouseId)));
-        const availableWithoutThisSale = Number(stockResult?.stock ?? 0) - Number(movement?.quantityDelta ?? 0);
-        if (availableWithoutThisSale < value.quantity) throw new Error("Insufficient stock for this sale");
+      const [linkedBill] = await tx.select({ billNumber: bills.billNumber }).from(bills).where(eq(bills.postedTransactionId, transactionId)).limit(1);
+      if (linkedBill) throw new Error(`Invoice ${linkedBill.billNumber} owns this sale. Duplicate and cancel the invoice to correct it.`);
+      if (existing.type === "customer_receipt" && existing.reference && existing.partyId) {
+        const [paidBill] = await tx.select({ billNumber: bills.billNumber }).from(bills).where(and(
+          eq(bills.billNumber, existing.reference), eq(bills.partyId, existing.partyId), eq(bills.status, "paid"),
+          sql`${bills.postedTransactionId} IS NOT NULL`,
+        )).limit(1);
+        if (paidBill) throw new Error(`Re-open invoice ${paidBill.billNumber} before editing this receipt.`);
       }
-
-      await tx.update(transactions).set({
-        quantity: existing.productId ? value.quantity.toFixed(3) : null,
-        unitPrice: existing.productId ? value.unitPrice.toFixed(2) : null,
-        totalAmount: value.totalAmount.toFixed(2),
-        description: value.description,
-        transactionDate: value.transactionDate,
-        reference: value.reference,
-        version: sql`${transactions.version} + 1`,
-        updatedAt: new Date(),
-      }).where(eq(transactions.id, transactionId));
-
-      if (movement) {
-        await tx.update(inventoryMovements).set({
-          quantityDelta: existing.type === "sale" ? (-value.quantity).toFixed(3) : value.quantity.toFixed(3),
-          unitCost: existing.type === "purchase" ? value.unitPrice.toFixed(4) : Number(product?.purchasePrice ?? 0).toFixed(4),
-          notes: value.description,
-        }).where(eq(inventoryMovements.id, movement.id));
+      if (existing.status !== "posted") throw new Error("Only posted transactions can be edited.");
+      if (value.totalAmount.toFixed(2) !== existing.totalAmount || value.transactionDate !== existing.transactionDate ||
+        (existing.productId && (value.quantity.toFixed(3) !== existing.quantity || value.unitPrice.toFixed(2) !== existing.unitPrice))) {
+        throw new Error("Financial details are locked. Reverse this transaction and record a corrected one.");
       }
-
       const [entry] = await tx.select().from(journalEntries)
         .where(and(eq(journalEntries.sourceType, "transaction"), eq(journalEntries.sourceId, transactionId))).limit(1);
       if (!entry) throw new Error("The transaction journal entry is missing.");
-      await tx.delete(journalLines).where(eq(journalLines.journalEntryId, entry.id));
-      await tx.update(journalEntries).set({ entryDate: value.transactionDate, description: value.description }).where(eq(journalEntries.id, entry.id));
-
-      const accounts = await tx.select({ id: ledgerAccounts.id, code: ledgerAccounts.code }).from(ledgerAccounts)
-        .where(inArray(ledgerAccounts.code, ["1000", "1100", "1200", "2000", "3000", "4000", "5000"]));
-      const amount = value.totalAmount.toFixed(2);
-      const base = { journalEntryId: entry.id, partyId: existing.partyId, bankAccountId: existing.bankAccountId };
-      const lines: Array<typeof journalLines.$inferInsert> = [];
-      const cash = accountByCode(accounts, "1000");
-      const receivable = accountByCode(accounts, "1100");
-      const inventory = accountByCode(accounts, "1200");
-      const payable = accountByCode(accounts, "2000");
-      const equity = accountByCode(accounts, "3000");
-      if (existing.type === "sale") {
-        lines.push(
-          { ...base, accountId: existing.paymentMethod === "credit" ? receivable : cash, side: "debit", amount },
-          { ...base, accountId: accountByCode(accounts, "4000"), side: "credit", amount },
-        );
-        const cost = product && Number(product.purchasePrice) * value.quantity;
-        if (cost && cost > 0) lines.push(
-          { ...base, accountId: accountByCode(accounts, "5000"), side: "debit", amount: cost.toFixed(2) },
-          { ...base, accountId: inventory, side: "credit", amount: cost.toFixed(2) },
-        );
-      } else if (existing.type === "purchase") {
-        lines.push(
-          { ...base, accountId: inventory, side: "debit", amount },
-          { ...base, accountId: existing.paymentMethod === "credit" ? payable : cash, side: "credit", amount },
-        );
-      } else if (existing.type === "bank_deposit") {
-        lines.push({ ...base, accountId: cash, side: "debit", amount }, { ...base, accountId: equity, side: "credit", amount });
-      } else if (existing.type === "bank_withdrawal") {
-        lines.push({ ...base, accountId: equity, side: "debit", amount }, { ...base, accountId: cash, side: "credit", amount });
-      } else if (existing.type === "customer_receipt") {
-        lines.push({ ...base, accountId: cash, side: "debit", amount }, { ...base, accountId: receivable, side: "credit", amount });
-      } else {
-        lines.push({ ...base, accountId: payable, side: "debit", amount }, { ...base, accountId: cash, side: "credit", amount });
-      }
-      await tx.insert(journalLines).values(lines);
+      await tx.update(transactions).set({ description: value.description, reference: value.reference,
+        version: sql`${transactions.version} + 1`, updatedAt: new Date() }).where(eq(transactions.id, transactionId));
+      await tx.update(journalEntries).set({ description: value.description }).where(eq(journalEntries.id, entry.id));
+      await tx.update(inventoryMovements).set({ notes: value.description }).where(eq(inventoryMovements.transactionId, transactionId));
       await tx.insert(auditLogs).values({
         userId: user.id, action: "update", entityType: "transaction", entityId: transactionId,
-        oldValues: { amount: existing.totalAmount, quantity: existing.quantity },
-        newValues: { amount, quantity: existing.productId ? value.quantity.toFixed(3) : null },
+        oldValues: { description: existing.description, reference: existing.reference },
+        newValues: { description: value.description, reference: value.reference },
       });
       await tx.execute(sql`SELECT pg_notify('crown_updates', ${JSON.stringify({ entity: "transaction", action: "updated", id: transactionId })})`);
     });
   } catch (error) {
-    if (error instanceof Error && (error.message.includes("Insufficient stock") || error.message.includes("no longer exists") || error.message.includes("missing"))) return { error: error.message };
+    if (error instanceof Error && (error.message.includes("Financial details") || error.message.includes("no longer exists") || error.message.includes("missing") || error.message.includes("Invoice") || error.message.includes("Re-open invoice") || error.message.includes("Only posted"))) return { error: error.message };
     throw error;
   }
   revalidatePath("/transactions");

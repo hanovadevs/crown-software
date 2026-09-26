@@ -1,12 +1,10 @@
 import { ArrowLeft, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
-import { DeleteButton } from "@/components/delete-button";
-import { deleteBillAction, updateBillStatusAction } from "@/app/actions/billing";
+import { updateBillStatusAction } from "@/app/actions/billing";
 import { getBill } from "@/db/billing-queries";
 import { getCompanySettings } from "@/db/operations-queries";
 import { formatDate, formatPKR } from "@/lib/utils";
@@ -62,6 +60,10 @@ export default async function BillPage({
 
   return (
     <main className="page invoice-page">
+      <p className="muted-text no-print">{bill.postedTransactionId
+        ? "This invoice posted a credit sale and stock movement when issued. Record the customer receipt in Transactions with this invoice number as the reference."
+        : bill.type === "quotation" ? "Quotations do not post to the ledger or stock."
+          : "This older invoice has no linked sale posting. Reconcile it with Transactions before recording any sale."}</p>
       <div className="invoice-actions no-print">
         <div className="invoice-actions-group">
           <Link className="button button-secondary" href="/bills">
@@ -80,11 +82,15 @@ export default async function BillPage({
           />
           {bill.status === "issued" && (
             <>
-              <form action={updateBillStatusAction.bind(null, id, "paid")}>
-                <button className="button button-success" type="submit">
-                  <CheckCircle2 size={16} /> Mark as Paid
-                </button>
-              </form>
+              {(!bill.postedTransactionId || Number(bill.paidReceiptAmount) >= Number(bill.totalAmount)) ? (
+                <form action={updateBillStatusAction.bind(null, id, "paid")}>
+                  <button className="button button-success" type="submit">
+                    <CheckCircle2 size={16} /> Mark as Paid
+                  </button>
+                </form>
+              ) : (
+                <Link className="button button-success" href="/transactions/new">Record Receipt</Link>
+              )}
               <form action={updateBillStatusAction.bind(null, id, "cancelled")}>
                 <button className="button button-secondary" type="submit">
                   <XCircle size={16} /> Cancel Bill
@@ -92,18 +98,13 @@ export default async function BillPage({
               </form>
             </>
           )}
-          {bill.status !== "issued" && (
+          {bill.status === "paid" && (
             <form action={updateBillStatusAction.bind(null, id, "issued")}>
               <button className="button button-secondary" type="submit">
                 <RotateCcw size={16} /> Re-open (Mark Issued)
               </button>
             </form>
           )}
-          <DeleteButton
-            action={deleteBillAction.bind(null, id)}
-            confirmMessage={`Delete bill ${bill.billNumber}? This will permanently remove this invoice.`}
-            label={`Delete ${bill.billNumber}`}
-          />
         </div>
       </div>
 

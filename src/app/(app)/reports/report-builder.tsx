@@ -2,7 +2,6 @@
 
 import { ArrowLeftRight, Banknote, Boxes, Download, FileText, MessageCircle, Package, Printer, UserCheck, Users } from "lucide-react";
 import { useState } from "react";
-import { formatPKR } from "@/lib/utils";
 
 const allReports = [
   { value: "transactions", title: "Transaction Report", description: "Detailed list of all transactions", icon: ArrowLeftRight, color: "#4169f6" },
@@ -41,23 +40,6 @@ export function ReportBuilder({ options, userRole }: { options: Options; userRol
   const showProduct = ["transactions", "products", "stock", "inventory-movements"].includes(type);
   const showWorker = !isStockManager && ["workers", "worker-payment-status", "worker-payments", "individual-worker"].includes(type);
   const showWarehouse = ["stock", "inventory-movements"].includes(type);
-
-  const selectedParty = options.parties.find((party) => party.id === partyId);
-  const selectedWorker = options.workers.find((worker) => worker.id === workerId);
-  const selectedReportTitle = reports.find((r) => r.value === type)?.title || "Report";
-
-  const partyNet = selectedParty ? Number(selectedParty.receivable) - Number(selectedParty.payable) : 0;
-
-  const targetPhone = selectedParty?.phone || selectedWorker?.phone || null;
-
-  const whatsappMessage = [
-    `${selectedReportTitle}`,
-    selectedParty ? `Party: ${selectedParty.name}` : null,
-    selectedParty ? `Net Balance: ${formatPKR(Math.abs(partyNet))} ${partyNet >= 0 ? "Receivable" : "Payable"}` : null,
-    selectedWorker ? `Worker: ${selectedWorker.name} (${selectedWorker.code})` : null,
-    "",
-    "Please find the detailed PDF report attached.",
-  ].filter(Boolean).join("\n");
 
   return (
     <form className="reports-layout" method="get">

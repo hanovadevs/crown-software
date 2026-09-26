@@ -50,6 +50,13 @@
       "when": 1786100792449,
       "tag": "0006_gate_pass_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790418479893,
+      "tag": "0007_eager_vector",
+      "breakpoints": true
     }
   ]
 }

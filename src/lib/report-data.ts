@@ -3,16 +3,15 @@ import "server-only";
 import { and, asc, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  bankAccounts,
   inventoryMovements,
   parties,
   products,
   transactions,
   warehouses,
-  workerPayments,
   workers,
 } from "@/db/schema";
 import { formatDate, formatPKR } from "./utils";
+import { partyLedgerEvents } from "./accounting";
 
 export const reportTypes = [
   "transactions",
@@ -164,6 +163,7 @@ export async function buildReport(
 
     const activity = await db
       .select({
+        id: transactions.id,
         number: transactions.transactionNumber,
         type: transactions.type,
         description: transactions.description,
@@ -176,6 +176,18 @@ export async function buildReport(
       .where(eq(transactions.partyId, filters.partyId))
       .orderBy(asc(transactions.transactionDate), asc(transactions.createdAt));
 
+    const reversalResult = await db.execute(sql`
+      SELECT je.source_id, je.entry_date, je.entry_number
+      FROM journal_entries je
+      JOIN transactions t ON t.id = je.source_id
+      WHERE je.source_type = 'transaction_reversal'
+        AND je.status = 'posted'
+        AND t.party_id = ${filters.partyId}
+    `);
+    const reversals = new Map((reversalResult.rows as Array<{ source_id: string; entry_date: string; entry_number: string }>)
+      .map((row) => [row.source_id, row]));
+    const events = partyLedgerEvents(activity, reversals);
+
     const openingBalance = Number(party.openingReceivable) - Number(party.openingPayable);
     let runningBalance = openingBalance;
     let periodTotalDebit = 0;
@@ -183,21 +195,7 @@ export async function buildReport(
 
     const rows: ReportRow[] = [];
 
-    // Pre-calculate running balance up to start date
-    for (const item of activity) {
-      if (item.status !== "posted") continue;
-      const amount = Number(item.amount);
-      const delta =
-        item.type === "sale" || item.type === "supplier_payment"
-          ? amount
-          : item.type === "purchase" || item.type === "customer_receipt"
-            ? -amount
-            : 0;
-
-      if (start && item.date < start) {
-        runningBalance += delta;
-      }
-    }
+    for (const event of events) if (start && event.date < start) runningBalance += event.delta;
 
     const effectiveOpening = runningBalance;
 
@@ -213,30 +211,24 @@ export async function buildReport(
       Payment: "—",
     });
 
-    for (const item of activity) {
-      if (item.status !== "posted") continue;
-      if (start && item.date < start) continue;
-      if (end && item.date > end) continue;
-
-      const amount = Number(item.amount);
-      const isDebit = item.type === "sale" || item.type === "supplier_payment";
-      const isCredit = item.type === "purchase" || item.type === "customer_receipt";
-      const delta = isDebit ? amount : isCredit ? -amount : 0;
-
-      if (isDebit) periodTotalDebit += amount;
-      if (isCredit) periodTotalCredit += amount;
-
-      runningBalance += delta;
+    for (const event of events) {
+      if (start && event.date < start) continue;
+      if (end && event.date > end) continue;
+      const isDebit = event.delta > 0;
+      const isCredit = event.delta < 0;
+      if (isDebit) periodTotalDebit += event.delta;
+      if (isCredit) periodTotalCredit -= event.delta;
+      runningBalance += event.delta;
 
       rows.push({
-        Date: formatDate(item.date),
-        Number: item.number,
-        Type: item.type.replaceAll("_", " ").toUpperCase(),
-        Description: item.description,
-        Debit: isDebit ? formatPKR(amount) : "—",
-        Credit: isCredit ? formatPKR(amount) : "—",
+        Date: formatDate(event.date),
+        Number: event.number,
+        Type: event.type,
+        Description: event.description,
+        Debit: isDebit ? formatPKR(event.delta) : "—",
+        Credit: isCredit ? formatPKR(-event.delta) : "—",
         Balance: `${formatPKR(Math.abs(runningBalance))} ${runningBalance >= 0 ? "Dr" : "Cr"}`,
-        Payment: item.paymentMethod.replaceAll("_", " "),
+        Payment: event.paymentMethod.replaceAll("_", " "),
       });
     }
 
@@ -281,12 +273,12 @@ export async function buildReport(
         isSupplier: parties.isSupplier,
         receivable: sql<string>`
           ${parties.openingReceivable}
-          + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'sale' AND status = 'posted'), 0)
+          + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'sale' AND status = 'posted' AND payment_method = 'credit'), 0)
           - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'customer_receipt' AND status = 'posted'), 0)
         `,
         payable: sql<string>`
           ${parties.openingPayable}
-          + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'purchase' AND status = 'posted'), 0)
+          + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'purchase' AND status = 'posted' AND payment_method = 'credit'), 0)
           - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND type = 'supplier_payment' AND status = 'posted'), 0)
         `,
       })
@@ -508,7 +500,7 @@ export async function buildReport(
   }
 
   if (type === "bank-balances") {
-    const data = await db.execute(sql`
+    const [data, unassigned] = await Promise.all([db.execute(sql`
       SELECT
         b.id,
         b.name,
@@ -516,16 +508,30 @@ export async function buildReport(
         b.account_number,
         b.is_cash_account,
         b.opening_balance,
-        ${Number(0)} + Number(b.opening_balance)
-        + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_deposit', 'customer_receipt') OR (t.type = 'sale' AND t.payment_method IN ('cash', 'bank')))), 0)
-        - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_withdrawal', 'supplier_payment') OR (t.type = 'purchase' AND t.payment_method IN ('cash', 'bank')))), 0)
+        b.opening_balance
+        + COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_deposit', 'customer_receipt') OR (t.type = 'sale' AND t.payment_method <> 'credit'))), 0)
+        - COALESCE(SUM(t.total_amount) FILTER (WHERE t.status = 'posted' AND (t.type IN ('bank_withdrawal', 'supplier_payment') OR (t.type = 'purchase' AND t.payment_method <> 'credit'))), 0)
+        - CASE WHEN b.id = (SELECT id FROM bank_accounts WHERE is_active AND is_cash_account ORDER BY created_at, id LIMIT 1)
+          THEN COALESCE((SELECT SUM(paid_amount) FROM worker_payments), 0) ELSE 0 END
         AS current_balance
       FROM bank_accounts b
-      LEFT JOIN transactions t ON (t.bank_account_id = b.id OR (b.is_cash_account AND t.payment_method = 'cash'))
+      LEFT JOIN transactions t ON (
+        t.bank_account_id = b.id OR (
+          t.bank_account_id IS NULL AND t.payment_method = 'cash' AND b.id = (
+            SELECT id FROM bank_accounts WHERE is_active AND is_cash_account ORDER BY created_at, id LIMIT 1
+          )
+        )
+      )
       WHERE b.is_active
       GROUP BY b.id
       ORDER BY b.name
-    `);
+    `), db.execute(sql`
+      SELECT COUNT(*) AS count, COALESCE(SUM(CASE
+        WHEN type IN ('bank_deposit', 'customer_receipt') OR (type = 'sale' AND payment_method <> 'credit') THEN total_amount
+        WHEN type IN ('bank_withdrawal', 'supplier_payment') OR (type = 'purchase' AND payment_method <> 'credit') THEN -total_amount
+        ELSE 0 END), 0) AS balance
+      FROM transactions WHERE status = 'posted' AND bank_account_id IS NULL AND payment_method IN ('bank', 'cheque')
+    `)]);
 
     let totalCashBank = 0;
     const rows = data.rows.map((acc) => {
@@ -539,6 +545,12 @@ export async function buildReport(
         Balance: formatPKR(bal),
       };
     });
+    const pending = unassigned.rows[0] as { count: string; balance: string };
+    if (Number(pending.count) > 0) {
+      totalCashBank += Number(pending.balance);
+      rows.push({ Account: "Unassigned bank transactions", Bank: "Needs account mapping", "Account #": "—",
+        Type: `${pending.count} transaction(s)`, Balance: formatPKR(pending.balance) });
+    }
 
     return {
       title: "Bank & Cash Accounts Liquidity Report",
@@ -556,8 +568,4 @@ export async function buildReport(
   }
 
   return { title: "Report", columns: [], rows: [] };
-}
-
-function inventoryMovementTypeEnumName(type: string) {
-  return type.replaceAll("_", " ").toUpperCase();
 }

@@ -107,8 +107,8 @@ export default async function ProductsPage({
                           </Link>
                           <DeleteButton
                             action={deleteProductAction.bind(null, product.id)}
-                            confirmMessage={`Delete ${product.name}? This also removes its stock movements, product transactions, accounting effects, and manufacturing definitions. Historical bill lines will keep their descriptions and amounts.`}
-                            label={`Delete ${product.name}`}
+                            confirmMessage={`Archive ${product.name}? Historical transactions and stock movements will be kept.`}
+                            label={`Archive ${product.name}`}
                           />
                         </div>
                       </td>

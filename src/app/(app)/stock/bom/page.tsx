@@ -10,7 +10,7 @@ import { BomBuilder } from "./bom-builder";
 export const metadata: Metadata = { title: "Bill of Materials (BOM Recipes)" };
 
 export default async function BomPage() {
-  const user = await requireUser();
+  await requireUser();
   const { finishedProducts, subProducts, activeBoms } = await getProductionFormData();
 
   return (

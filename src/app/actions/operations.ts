@@ -19,6 +19,7 @@ import {
   workers,
 } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { hasPrecision } from "@/lib/accounting";
 
 export type OperationFormState = {
   error?: string;
@@ -38,19 +39,36 @@ function accountId(accounts: Array<{ id: string; code: string }>, code: string) 
   return account.id;
 }
 
-async function deleteSourceJournal(
+async function reverseSourceJournal(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   sourceType: string,
   sourceId: string,
+  userId: string,
 ) {
   const entries = await tx
-    .select({ id: journalEntries.id })
+    .select({ id: journalEntries.id, entryNumber: journalEntries.entryNumber })
     .from(journalEntries)
-    .where(and(eq(journalEntries.sourceType, sourceType), eq(journalEntries.sourceId, sourceId)));
-  if (!entries.length) return;
-  const ids = entries.map((entry) => entry.id);
-  await tx.delete(journalLines).where(inArray(journalLines.journalEntryId, ids));
-  await tx.delete(journalEntries).where(inArray(journalEntries.id, ids));
+    .where(and(eq(journalEntries.sourceType, sourceType), eq(journalEntries.sourceId, sourceId),
+      sql`NOT EXISTS (SELECT 1 FROM journal_entries reversal WHERE reversal.reversal_of_id = ${journalEntries.id})`));
+  const reversalDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  for (const entry of entries) {
+    const lines = await tx.select().from(journalLines).where(eq(journalLines.journalEntryId, entry.id));
+    if (!lines.length) throw new Error(`Journal ${entry.entryNumber} has no lines and needs manual review.`);
+    const [reversal] = await tx.insert(journalEntries).values({
+      entryNumber: await nextDocumentNumber(tx as unknown as Parameters<typeof nextDocumentNumber>[0],
+        "journal", "JRN", new Date(`${reversalDate}T00:00:00+05:00`)),
+      entryDate: reversalDate, description: `Reversal of ${entry.entryNumber}`,
+      sourceType: `${sourceType}_reversal`, sourceId, reversalOfId: entry.id, createdBy: userId,
+    }).returning({ id: journalEntries.id });
+    await tx.insert(journalLines).values(lines.map((line) => ({
+      journalEntryId: reversal.id, accountId: line.accountId, partyId: line.partyId,
+      bankAccountId: line.bankAccountId, side: line.side === "debit" ? "credit" as const : "debit" as const,
+      amount: line.amount, memo: `Reversal of ${entry.entryNumber}`,
+    })));
+  }
+  return entries.length;
 }
 
 const stockAdjustmentSchema = z.object({
@@ -82,9 +100,13 @@ export async function createStockAdjustmentAction(
     return { error: "Please correct the stock adjustment.", fieldErrors: parsed.error.flatten().fieldErrors };
   }
   const value = parsed.data;
+  if (!hasPrecision(value.quantity, 3) || !hasPrecision(value.unitCost, 4)) {
+    return { error: "Use at most three decimals for quantity and four for unit cost." };
+  }
 
   try {
     await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM products WHERE id = ${value.productId} FOR UPDATE`);
       const [[product], [warehouse], [stockResult]] = await Promise.all([
         tx.select().from(products).where(and(eq(products.id, value.productId), eq(products.isActive, true))).limit(1),
         tx.select().from(warehouses).where(and(eq(warehouses.id, value.warehouseId), eq(warehouses.isActive, true))).limit(1),
@@ -221,12 +243,14 @@ export async function saveWorkerPaymentAction(
     await db.transaction(async (tx) => {
       const [worker] = await tx.select().from(workers).where(and(eq(workers.id, value.workerId), eq(workers.status, "active"))).limit(1);
       if (!worker) throw new Error("The selected worker is unavailable.");
+      await tx.execute(sql`SELECT id FROM worker_payments WHERE worker_id = ${worker.id} AND salary_month = ${salaryMonth} FOR UPDATE`);
       const [existing] = await tx.select().from(workerPayments)
         .where(and(eq(workerPayments.workerId, worker.id), eq(workerPayments.salaryMonth, salaryMonth))).limit(1);
       let paymentId: string;
       if (existing) {
         paymentId = existing.id;
-        await deleteSourceJournal(tx, "worker_payment", paymentId);
+        const reversed = await reverseSourceJournal(tx, "worker_payment", paymentId, user.id);
+        if (Number(existing.paidAmount) > 0 && reversed === 0) throw new Error("The existing payroll journal is missing and needs manual review.");
         await tx.update(workerPayments).set({
           grossAmount: value.grossAmount.toFixed(2),
           advanceAmount: value.advanceAmount.toFixed(2),
@@ -256,7 +280,9 @@ export async function saveWorkerPaymentAction(
       if (value.paidAmount > 0) {
         const accounts = await tx.select({ id: ledgerAccounts.id, code: ledgerAccounts.code })
           .from(ledgerAccounts).where(inArray(ledgerAccounts.code, ["1000", "5100"]));
-        const entryDate = value.paidDate || `${value.salaryMonth}-01`;
+        const entryDate = existing && Number(existing.paidAmount) > 0
+          ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date())
+          : value.paidDate || `${value.salaryMonth}-01`;
         const [entry] = await tx.insert(journalEntries).values({
           entryNumber: await nextDocumentNumber(
             tx as unknown as Parameters<typeof nextDocumentNumber>[0], "journal", "JRN", new Date(`${entryDate}T12:00:00+05:00`),
@@ -299,16 +325,24 @@ export async function deleteWorkerPaymentAction(paymentId: string) {
   if (!canEdit(user.role)) throw new Error("You do not have payroll permission.");
   let workerId = "";
   await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM worker_payments WHERE id = ${paymentId} FOR UPDATE`);
     const [payment] = await tx.select().from(workerPayments).where(eq(workerPayments.id, paymentId)).limit(1);
     if (!payment) return;
     workerId = payment.workerId;
-    await deleteSourceJournal(tx, "worker_payment", paymentId);
-    await tx.delete(workerPayments).where(eq(workerPayments.id, paymentId));
-    await tx.insert(auditLogs).values({ userId: user.id, action: "archive", entityType: "worker_payment", entityId: paymentId });
+    if (Number(payment.paidAmount) === 0) return;
+    const reversed = await reverseSourceJournal(tx, "worker_payment", paymentId, user.id);
+    if (reversed === 0) throw new Error("The payroll journal is missing and needs manual review.");
+    await tx.update(workerPayments).set({ paidAmount: "0.00", status: "pending", paidAt: null, updatedAt: new Date() })
+      .where(eq(workerPayments.id, paymentId));
+    await tx.insert(auditLogs).values({
+      userId: user.id, action: "reverse", entityType: "worker_payment", entityId: paymentId,
+      oldValues: { paidAmount: payment.paidAmount, status: payment.status },
+      newValues: { paidAmount: "0.00", status: "pending" },
+    });
     await tx.execute(
       sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
         entity: "worker_payment",
-        action: "deleted",
+        action: "reversed",
         id: paymentId,
       })})`,
     );

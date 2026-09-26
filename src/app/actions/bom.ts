@@ -18,8 +18,8 @@ const bomSchema = z.object({
     .array(
       z.object({
         materialProductId: z.string().uuid("Invalid material product ID"),
-        quantity: z.number().positive("Item quantity must be greater than 0"),
-        expectedWastePercent: z.number().min(0, "Waste percent cannot be negative").default(0),
+        quantity: z.coerce.number().positive("Item quantity must be greater than 0"),
+        expectedWastePercent: z.coerce.number().min(0, "Waste percent cannot be negative").default(0),
       }),
     )
     .min(1, "At least one component material item is required"),
@@ -33,18 +33,15 @@ export async function saveBomAction(prevState: FormState, formData: FormData): P
 
   try {
     const rawItems = formData.get("itemsJson");
-    const parsedItems = rawItems ? JSON.parse(rawItems as string) : [];
+    const parsedItems: unknown = rawItems ? JSON.parse(rawItems as string) : [];
+    if (!Array.isArray(parsedItems)) return { error: "Invalid materials list." };
 
     const parsed = bomSchema.parse({
       finishedProductId: formData.get("finishedProductId"),
       code: formData.get("code"),
       outputQuantity: Number(formData.get("outputQuantity") || 1),
       notes: formData.get("notes") || undefined,
-      items: parsedItems.map((item: any) => ({
-        materialProductId: item.materialProductId,
-        quantity: Number(item.quantity || 0),
-        expectedWastePercent: Number(item.expectedWastePercent || 0),
-      })),
+      items: parsedItems,
     });
 
     await db.transaction(async (tx) => {
@@ -101,9 +98,9 @@ export async function saveBomAction(prevState: FormState, formData: FormData): P
     revalidatePath("/stock");
     revalidatePath("/stock/bom");
     return { success: true };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("saveBomAction error:", err);
-    return { error: err.message || "Failed to save Bill of Materials recipe" };
+    return { error: err instanceof Error ? err.message : "Failed to save Bill of Materials recipe" };
   }
 }
 

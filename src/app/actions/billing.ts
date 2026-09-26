@@ -10,11 +10,18 @@ import {
   auditLogs,
   billItems,
   bills,
+  inventoryMovements,
+  journalEntries,
+  journalLines,
+  ledgerAccounts,
   parties,
   products,
+  transactions,
+  warehouses,
 } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import type { FormState } from "./business";
+import { calculateBillTotals, hasPrecision, productTotal } from "@/lib/accounting";
 
 const itemSchema = z.object({
   productId: z.string().uuid().nullable(),
@@ -82,6 +89,11 @@ export async function createBillAction(
   }
 
   const value = parsed.data;
+  if (value.items.some((item) => !hasPrecision(item.quantity, 3) || !hasPrecision(item.unitPrice, 2)) ||
+      !hasPrecision(value.shippingAmount, 2) || !hasPrecision(value.discountAmount, 2) ||
+      !hasPrecision(value.taxRate, 4) || !hasPrecision(value.sedRate, 4)) {
+    return { error: "Use at most three decimals for quantity, four for tax rates, and two for money." };
+  }
   if (value.dueDate && value.dueDate < value.billDate) {
     return { error: "Due date cannot be earlier than the bill date." };
   }
@@ -109,39 +121,22 @@ export async function createBillAction(
   }
 
   const isTaxInvoice = value.type === "tax_invoice";
-  const effectiveTaxRate = isTaxInvoice ? value.taxRate : value.taxRate;
+  const effectiveTaxRate = value.taxRate;
   const effectiveSedRate = isTaxInvoice ? value.sedRate : 0;
-
-  let subtotal = 0;
-  let totalSalesTax = 0;
-  let totalSed = 0;
-
-  const processedItems = value.items.map((item) => {
-    const baseAmount = item.quantity * item.unitPrice;
-    const itemSalesTax = baseAmount * (effectiveTaxRate / 100);
-    const itemSed = baseAmount * (effectiveSedRate / 100);
-    const lineTotal = baseAmount + itemSalesTax + itemSed;
-
-    subtotal += baseAmount;
-    totalSalesTax += itemSalesTax;
-    totalSed += itemSed;
-
-    return {
-      productId: item.productId,
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      salesTaxRate: effectiveTaxRate,
-      salesTaxAmount: itemSalesTax,
-      sedRate: effectiveSedRate,
-      sedAmount: itemSed,
-      lineTotal,
-    };
-  });
-
-  const total =
-    subtotal + totalSalesTax + totalSed + value.shippingAmount - value.discountAmount;
-  if (total < 0) return { error: "Discount cannot exceed the bill total." };
+  const calculated = calculateBillTotals(value.items, effectiveTaxRate, effectiveSedRate, value.shippingAmount, value.discountAmount);
+  const processedItems = value.items.map((item, index) => ({
+    ...item,
+    salesTaxRate: effectiveTaxRate,
+    salesTaxAmount: calculated.lines[index].salesTaxAmount,
+    sedRate: effectiveSedRate,
+    sedAmount: calculated.lines[index].sedAmount,
+    lineTotal: calculated.lines[index].lineTotal,
+  }));
+  const { subtotal, total } = calculated;
+  const totalSalesTax = calculated.salesTaxAmount;
+  const totalSed = calculated.sedAmount;
+  const revenueCents = Math.round(total * 100) - Math.round(totalSalesTax * 100) - Math.round(totalSed * 100);
+  if (total <= 0 || revenueCents < 0) return { error: "Discount cannot exceed the untaxed bill amount." };
 
   const prefixMap: Record<string, string> = {
     invoice: "INV",
@@ -149,7 +144,36 @@ export async function createBillAction(
     tax_invoice: "STI",
   };
 
-  const billId = await db.transaction(async (tx) => {
+  let billId: string;
+  try {
+  billId = await db.transaction(async (tx) => {
+    const issueInvoice = value.type !== "quotation";
+    const stockProducts = new Map<string, { quantity: number; unitCost: number }>();
+    let warehouseId: string | null = null;
+    if (issueInvoice) {
+      for (const productId of [...new Set(productIds)].sort()) {
+        await tx.execute(sql`SELECT id FROM products WHERE id = ${productId} FOR UPDATE`);
+        const [product] = await tx.select({ id: products.id, purchasePrice: products.purchasePrice })
+          .from(products).where(and(eq(products.id, productId), eq(products.isActive, true), eq(products.isSellable, true))).limit(1);
+        if (!product) throw new Error("An invoice product is no longer available for sale.");
+        stockProducts.set(productId, { quantity: 0, unitCost: Number(product.purchasePrice) });
+      }
+      for (const item of value.items) {
+        if (!item.productId) continue;
+        stockProducts.get(item.productId)!.quantity += item.quantity;
+      }
+      if (stockProducts.size) {
+        const [warehouse] = await tx.select({ id: warehouses.id }).from(warehouses)
+          .where(eq(warehouses.isDefault, true)).limit(1);
+        if (!warehouse) throw new Error("No default warehouse is configured.");
+        warehouseId = warehouse.id;
+        for (const [productId, product] of stockProducts) {
+          const [stock] = await tx.select({ quantity: sql<string>`COALESCE(SUM(${inventoryMovements.quantityDelta}), 0)` })
+            .from(inventoryMovements).where(and(eq(inventoryMovements.productId, productId), eq(inventoryMovements.warehouseId, warehouseId)));
+          if (Number(stock?.quantity ?? 0) < product.quantity) throw new Error("Insufficient stock to issue this invoice.");
+        }
+      }
+    }
     const billNumber = await nextDocumentNumber(
       tx as unknown as Parameters<typeof nextDocumentNumber>[0],
       value.type,
@@ -198,6 +222,54 @@ export async function createBillAction(
       })),
     );
 
+    if (issueInvoice) {
+      const transactionNumber = await nextDocumentNumber(tx as unknown as Parameters<typeof nextDocumentNumber>[0], "transaction", "TXN", new Date(`${value.billDate}T00:00:00+05:00`));
+      const [sale] = await tx.insert(transactions).values({
+        transactionNumber, type: "sale", partyId: value.partyId, warehouseId,
+        totalAmount: total.toFixed(2), paymentMethod: "credit",
+        description: `Invoice ${billNumber}`, reference: billNumber,
+        transactionDate: value.billDate, createdBy: user.id,
+      }).returning({ id: transactions.id });
+      await tx.update(bills).set({ postedTransactionId: sale.id }).where(eq(bills.id, created.id));
+      let costCents = 0;
+      for (const [productId, product] of stockProducts) {
+        await tx.insert(inventoryMovements).values({
+          productId, warehouseId: warehouseId!, transactionId: sale.id,
+          movementType: "sale", quantityDelta: (-product.quantity).toFixed(3),
+          unitCost: product.unitCost.toFixed(4), reference: billNumber,
+          notes: `Issued invoice ${billNumber}`, createdBy: user.id,
+        });
+        costCents += Math.round(productTotal(product.quantity, product.unitCost) * 100);
+      }
+      const taxAccounts = [];
+      if (totalSalesTax > 0) taxAccounts.push({ code: "2100", name: "Sales Tax Payable", type: "liability" as const, isSystem: true });
+      if (totalSed > 0) taxAccounts.push({ code: "2110", name: "SED Payable", type: "liability" as const, isSystem: true });
+      if (taxAccounts.length) await tx.insert(ledgerAccounts).values(taxAccounts).onConflictDoNothing();
+      const accounts = await tx.select({ id: ledgerAccounts.id, code: ledgerAccounts.code }).from(ledgerAccounts)
+        .where(inArray(ledgerAccounts.code, ["1100", "1200", "4000", "5000", "2100", "2110"]));
+      const account = (code: string) => {
+        const found = accounts.find((item) => item.code === code);
+        if (!found) throw new Error(`Ledger account ${code} is not configured.`);
+        return found.id;
+      };
+      const entryNumber = await nextDocumentNumber(tx as unknown as Parameters<typeof nextDocumentNumber>[0], "journal", "JRN", new Date(`${value.billDate}T00:00:00+05:00`));
+      const [entry] = await tx.insert(journalEntries).values({
+        entryNumber, entryDate: value.billDate, description: `Issued invoice ${billNumber}`,
+        sourceType: "transaction", sourceId: sale.id, createdBy: user.id,
+      }).returning({ id: journalEntries.id });
+      const lines: Array<typeof journalLines.$inferInsert> = [
+        { journalEntryId: entry.id, accountId: account("1100"), partyId: value.partyId, side: "debit", amount: total.toFixed(2) },
+      ];
+      if (revenueCents > 0) lines.push({ journalEntryId: entry.id, accountId: account("4000"), partyId: value.partyId, side: "credit", amount: (revenueCents / 100).toFixed(2) });
+      if (totalSalesTax > 0) lines.push({ journalEntryId: entry.id, accountId: account("2100"), partyId: value.partyId, side: "credit", amount: totalSalesTax.toFixed(2) });
+      if (totalSed > 0) lines.push({ journalEntryId: entry.id, accountId: account("2110"), partyId: value.partyId, side: "credit", amount: totalSed.toFixed(2) });
+      if (costCents > 0) lines.push(
+        { journalEntryId: entry.id, accountId: account("5000"), partyId: value.partyId, side: "debit", amount: (costCents / 100).toFixed(2) },
+        { journalEntryId: entry.id, accountId: account("1200"), partyId: value.partyId, side: "credit", amount: (costCents / 100).toFixed(2) },
+      );
+      await tx.insert(journalLines).values(lines);
+    }
+
     await tx.insert(auditLogs).values({
       userId: user.id,
       action: "create",
@@ -214,11 +286,15 @@ export async function createBillAction(
     );
     return created.id;
   });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "The bill could not be issued." };
+  }
 
   revalidatePath("/bills");
   revalidatePath("/dashboard");
   revalidatePath("/parties");
   revalidatePath("/reports");
+  revalidatePath("/stock");
   redirect(`/bills/${billId}`);
 }
 
@@ -231,9 +307,27 @@ export async function updateBillStatusAction(
     throw new Error("You do not have permission to update bills.");
   }
 
+  if (newStatus === "cancelled") {
+    await cancelBill(billId, user.id);
+    revalidateBillPaths(billId);
+    return;
+  }
   await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM bills WHERE id = ${billId} FOR UPDATE`);
     const [bill] = await tx.select().from(bills).where(eq(bills.id, billId)).limit(1);
     if (!bill) throw new Error("Bill not found.");
+    if (bill.type === "quotation" && newStatus === "paid") throw new Error("A quotation cannot be marked paid.");
+    if (bill.status === "cancelled") throw new Error("A cancelled bill cannot be reopened. Duplicate it to create a new bill.");
+    if (newStatus === "paid" && bill.postedTransactionId) {
+      const [receipts] = await tx.select({ amount: sql<string>`COALESCE(SUM(${transactions.totalAmount}), 0)` })
+        .from(transactions).where(and(
+          eq(transactions.type, "customer_receipt"), eq(transactions.status, "posted"),
+          eq(transactions.partyId, bill.partyId), eq(transactions.reference, bill.billNumber),
+        ));
+      if (Number(receipts?.amount ?? 0) < Number(bill.totalAmount)) {
+        throw new Error(`Record customer receipts totalling ${bill.totalAmount} with reference ${bill.billNumber} before marking this invoice paid.`);
+      }
+    }
 
     await tx
       .update(bills)
@@ -258,11 +352,7 @@ export async function updateBillStatusAction(
     );
   });
 
-  revalidatePath("/bills");
-  revalidatePath(`/bills/${billId}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/parties");
-  revalidatePath("/reports");
+  revalidateBillPaths(billId);
 }
 
 export async function deleteBillAction(billId: string) {
@@ -271,15 +361,72 @@ export async function deleteBillAction(billId: string) {
     throw new Error("You do not have permission to delete bills.");
   }
 
-  await db.transaction(async (tx) => {
-    const [bill] = await tx.select().from(bills).where(eq(bills.id, billId)).limit(1);
-    if (!bill) return;
+  await cancelBill(billId, user.id);
+  revalidateBillPaths(billId);
+  redirect("/bills");
+}
 
-    await tx.delete(billItems).where(eq(billItems.billId, billId));
-    await tx.delete(bills).where(eq(bills.id, billId));
+function revalidateBillPaths(billId: string) {
+  for (const path of ["/bills", `/bills/${billId}`, "/dashboard", "/parties", "/transactions", "/stock", "/reports"]) revalidatePath(path);
+}
+
+async function cancelBill(billId: string, userId: string) {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM bills WHERE id = ${billId} FOR UPDATE`);
+    const [bill] = await tx.select().from(bills).where(eq(bills.id, billId)).limit(1);
+    if (!bill || bill.status === "cancelled") return;
+    if (bill.status === "paid") throw new Error("Re-open the paid bill before cancelling it.");
+
+    if (bill.postedTransactionId) {
+      const [receipts] = await tx.select({ count: sql<number>`COUNT(*)` }).from(transactions)
+        .where(and(eq(transactions.type, "customer_receipt"), eq(transactions.status, "posted"),
+          eq(transactions.partyId, bill.partyId), eq(transactions.reference, bill.billNumber)));
+      if (Number(receipts?.count ?? 0) > 0) throw new Error("Reverse receipts linked to this invoice before cancelling it.");
+      const transactionId = bill.postedTransactionId;
+      await tx.execute(sql`SELECT id FROM transactions WHERE id = ${transactionId} FOR UPDATE`);
+      const [sale] = await tx.select().from(transactions).where(eq(transactions.id, transactionId)).limit(1);
+      if (!sale || sale.status !== "posted") throw new Error("The invoice sale is missing or already reversed.");
+      const movements = await tx.select().from(inventoryMovements).where(eq(inventoryMovements.transactionId, transactionId));
+      for (const productId of [...new Set(movements.map((movement) => movement.productId))].sort()) {
+        await tx.execute(sql`SELECT id FROM products WHERE id = ${productId} FOR UPDATE`);
+      }
+      if (movements.length) await tx.insert(inventoryMovements).values(movements.map((movement) => ({
+        productId: movement.productId, warehouseId: movement.warehouseId, transactionId,
+        movementType: "return_in" as const, quantityDelta: (-Number(movement.quantityDelta)).toFixed(3),
+        unitCost: movement.unitCost, reference: `REV-${bill.billNumber}`,
+        notes: `Cancellation of ${bill.billNumber}`, createdBy: userId,
+      })));
+      const [entry] = await tx.select().from(journalEntries)
+        .where(and(eq(journalEntries.sourceType, "transaction"), eq(journalEntries.sourceId, transactionId))).limit(1);
+      if (!entry) throw new Error("The invoice journal entry is missing.");
+      const lines = await tx.select().from(journalLines).where(eq(journalLines.journalEntryId, entry.id));
+      if (!lines.length) throw new Error("The invoice journal lines are missing.");
+      const reversalDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date());
+      const [reversal] = await tx.insert(journalEntries).values({
+        entryNumber: await nextDocumentNumber(tx as unknown as Parameters<typeof nextDocumentNumber>[0], "journal", "JRN", new Date(`${reversalDate}T00:00:00+05:00`)),
+        entryDate: reversalDate, description: `Cancellation of ${bill.billNumber}`,
+        sourceType: "transaction_reversal", sourceId: transactionId, reversalOfId: entry.id, createdBy: userId,
+      }).returning({ id: journalEntries.id });
+      await tx.insert(journalLines).values(lines.map((line) => ({
+        journalEntryId: reversal.id, accountId: line.accountId, partyId: line.partyId,
+        bankAccountId: line.bankAccountId, side: line.side === "debit" ? "credit" as const : "debit" as const,
+        amount: line.amount, memo: `Cancellation of ${bill.billNumber}`,
+      })));
+      await tx.update(transactions).set({ status: "reversed", updatedAt: new Date(), version: sql`${transactions.version} + 1` })
+        .where(eq(transactions.id, transactionId));
+      await tx.insert(auditLogs).values({
+        userId, action: "reverse", entityType: "transaction", entityId: transactionId,
+        oldValues: { status: sale.status, amount: sale.totalAmount },
+        newValues: { status: "reversed", reversalJournalId: reversal.id },
+      });
+    }
+
+    await tx.update(bills).set({ status: "cancelled", updatedAt: new Date() }).where(eq(bills.id, billId));
 
     await tx.insert(auditLogs).values({
-      userId: user.id,
+      userId,
       action: "archive",
       entityType: "bill",
       entityId: billId,
@@ -289,15 +436,9 @@ export async function deleteBillAction(billId: string) {
     await tx.execute(
       sql`SELECT pg_notify('crown_updates', ${JSON.stringify({
         entity: "bill",
-        action: "deleted",
+        action: "cancelled",
         id: billId,
       })})`,
     );
   });
-
-  revalidatePath("/bills");
-  revalidatePath("/dashboard");
-  revalidatePath("/parties");
-  revalidatePath("/reports");
-  redirect("/bills");
 }

@@ -2,7 +2,7 @@ import { Copy, Eye, FileText, Plus, Printer, ReceiptText, Search } from "lucide-
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader, StatCard } from "@/components/ui";
-import { listBills } from "@/db/billing-queries";
+import { getBillsSummary, listBills } from "@/db/billing-queries";
 import { requireUser } from "@/lib/auth";
 import { formatDate, formatPKR } from "@/lib/utils";
 import { deleteBillAction } from "@/app/actions/billing";
@@ -15,19 +15,16 @@ export default async function BillsHistoryPage({
 }: {
   searchParams: Promise<{ q?: string; type?: string }>;
 }) {
-  const user = await requireUser();
+  await requireUser();
   const { q = "", type = "all" } = await searchParams;
-  const billList = await listBills(q, type);
-
-  const totalRevenue = billList.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
-  const taxInvoiceCount = billList.filter((b) => b.type === "tax_invoice").length;
+  const [billList, summary] = await Promise.all([listBills(q, type), getBillsSummary()]);
 
   return (
     <main className="page">
       <PageHeader
         eyebrow="Sales & Document Ledger"
         title="Invoices & Bills History"
-        description="Review, reprint, or regenerate previous commercial invoices, quotations, and official sales tax documents"
+        description="New issued invoices post sales and stock. Quotations and older unlinked invoices remain documents; record payments in Transactions."
         action={
           <Link className="button button-primary" href="/bills/new">
             <Plus size={19} /> Generate New Bill
@@ -40,22 +37,22 @@ export default async function BillsHistoryPage({
         <StatCard
           icon={ReceiptText}
           label="Total Documents Generated"
-          value={String(billList.length)}
+          value={String(summary.documentCount)}
           hint="Invoices, quotations & tax records"
           color="#4169f6"
         />
         <StatCard
           icon={FileText}
           label="Total Invoiced Volume"
-          value={formatPKR(totalRevenue)}
-          hint="Cumulative billed gross value"
+          value={formatPKR(summary.invoicedAmount)}
+          hint="All issued invoices, excluding quotations and cancelled bills"
           color="#18c77a"
         />
         <StatCard
           icon={Printer}
           label="Sales Tax / S.E.D. Invoices"
-          value={String(taxInvoiceCount)}
-          hint="Official FBR tax compliance copies"
+          value={String(summary.taxInvoiceCount)}
+          hint="Sales tax document copies"
           color="#13b8d3"
         />
       </section>
@@ -171,15 +168,15 @@ export default async function BillsHistoryPage({
                           <Link
                             className="button button-secondary small-button"
                             href={`/bills/new?duplicateId=${bill.id}`}
-                            title="Generate / Duplicate Previous Bill"
+                            title="Create a new bill using this bill as a template; issuing it will post a new sale"
                           >
-                            <Copy size={14} /> Duplicate
+                            <Copy size={14} /> Use as Template
                           </Link>
-                          <DeleteButton
+                          {bill.status !== "cancelled" && bill.status !== "paid" && <DeleteButton
                             action={deleteBillAction.bind(null, bill.id)}
-                            confirmMessage={`Delete bill ${bill.billNumber}? This will permanently remove this invoice and its items.`}
-                            label={`Delete ${bill.billNumber}`}
-                          />
+                            confirmMessage={`Cancel bill ${bill.billNumber}? Its linked sale and stock movements will be reversed.`}
+                            label={`Cancel ${bill.billNumber}`}
+                          />}
                         </div>
                       </td>
                     </tr>

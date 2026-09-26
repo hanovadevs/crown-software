@@ -8,5 +8,5 @@ function todayInKarachi() {
 
 export default async function NewWorkerPaymentPage({ searchParams }: { searchParams: Promise<{ worker?: string }> }) {
   const [workers, params] = await Promise.all([getWorkerPaymentOptions(), searchParams]);
-  return <main className="page form-page"><PageHeader title="Worker Salary Payment" description="Post or update a monthly salary payment with accounting records" /><WorkerPaymentForm workers={workers} today={todayInKarachi()} initialWorkerId={params.worker} /></main>;
+  return <main className="page form-page"><PageHeader title="Worker Salary Payment" description="Post or update a monthly salary payment. Payments currently reduce Factory Cash." /><WorkerPaymentForm workers={workers} today={todayInKarachi()} initialWorkerId={params.worker} /></main>;
 }

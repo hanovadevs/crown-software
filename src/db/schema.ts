@@ -471,6 +471,7 @@ export const bills = pgTable(
     partyId: uuid("party_id")
       .notNull()
       .references(() => parties.id, { onDelete: "restrict" }),
+    postedTransactionId: uuid("posted_transaction_id").references(() => transactions.id, { onDelete: "restrict" }),
     billDate: date("bill_date").notNull(),
     dueDate: date("due_date"),
     supplierNtn: varchar("supplier_ntn", { length: 80 }),
@@ -507,6 +508,7 @@ export const bills = pgTable(
   },
   (table) => [
     uniqueIndex("bills_number_unique").on(table.billNumber),
+    uniqueIndex("bills_posted_transaction_unique").on(table.postedTransactionId),
     index("bills_party_idx").on(table.partyId),
     index("bills_date_idx").on(table.billDate),
     check(

@@ -70,7 +70,7 @@ export default async function WorkersPage() {
                       <div className="card-actions">
                         <Link className="small-icon-button" href={`/workers/${worker.id}`} aria-label={`View ${worker.name}`}><Eye size={17} /></Link>
                         <Link className="small-icon-button" href={`/workers/${worker.id}/edit`} aria-label={`Edit ${worker.name}`}><Pencil size={17} /></Link>
-                        <DeleteButton action={deleteWorkerAction.bind(null, worker.id)} confirmMessage={`Delete ${worker.name} and all salary payment records?`} label={`Delete ${worker.name}`} />
+                        {worker.status === "active" && <DeleteButton action={deleteWorkerAction.bind(null, worker.id)} confirmMessage={`Archive ${worker.name}? Salary history will remain available.`} label={`Archive ${worker.name}`} />}
                       </div>
                     </td>
                   </tr>

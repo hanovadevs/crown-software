@@ -15,6 +15,7 @@ import {
   type FormState,
 } from "@/app/actions/business";
 import { formatPKR } from "@/lib/utils";
+import { productTotal } from "@/lib/accounting";
 
 type TransactionType =
   | "sale"
@@ -50,8 +51,8 @@ const typeOptions = [
   { value: "purchase", label: "Purchase", icon: ArrowDownLeft },
   { value: "customer_receipt", label: "Customer Receipt", icon: BanknoteArrowDown },
   { value: "supplier_payment", label: "Supplier Payment", icon: BanknoteArrowUp },
-  { value: "bank_deposit", label: "Bank Deposit", icon: BanknoteArrowDown },
-  { value: "bank_withdrawal", label: "Bank Withdrawal", icon: BanknoteArrowUp },
+  { value: "bank_deposit", label: "Owner Deposit", icon: BanknoteArrowDown },
+  { value: "bank_withdrawal", label: "Owner Withdrawal", icon: BanknoteArrowUp },
 ] satisfies Array<{ value: TransactionType; label: string; icon: typeof ArrowUpRight }>;
 
 export function TransactionForm({ parties, products, accounts, today }: Props) {
@@ -64,6 +65,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("0");
   const [amount, setAmount] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("credit");
 
   const selectedProduct = products.find((product) => product.id === productId);
   const isPartyTransaction = [
@@ -73,6 +75,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
     "supplier_payment",
   ].includes(type);
   const isBankTransaction = ["bank_deposit", "bank_withdrawal"].includes(type);
+  const needsBankAccount = isBankTransaction || paymentMethod === "bank" || paymentMethod === "cheque";
   const allowsProduct = ["sale", "purchase"].includes(type);
   const partyOptions = useMemo(
     () =>
@@ -92,6 +95,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
 
   function changeType(nextType: TransactionType) {
     setType(nextType);
+    setPaymentMethod(["customer_receipt", "supplier_payment", "bank_deposit", "bank_withdrawal"].includes(nextType) ? "cash" : "credit");
     if (!["sale", "purchase"].includes(nextType)) {
       setProductId("");
       setQuantity("1");
@@ -106,7 +110,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
           ? selectedProduct.salePrice
           : selectedProduct.purchasePrice;
       setUnitPrice(nextPrice);
-      setAmount((Number(quantity) * Number(nextPrice)).toFixed(2));
+      setAmount(productTotal(Number(quantity), Number(nextPrice)).toFixed(2));
     } else {
       setProductId("");
       setUnitPrice("0");
@@ -123,20 +127,18 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
     }
     const price = type === "sale" ? product.salePrice : product.purchasePrice;
     setUnitPrice(price);
-    setAmount((Number(quantity) * Number(price)).toFixed(2));
+    setAmount(productTotal(Number(quantity), Number(price)).toFixed(2));
   }
 
   function recalculate(nextQuantity: string, nextUnitPrice: string) {
     setAmount(
-      (
-        Math.max(0, Number(nextQuantity) || 0) *
-        Math.max(0, Number(nextUnitPrice) || 0)
-      ).toFixed(2),
+      productTotal(Math.max(0, Number(nextQuantity) || 0), Math.max(0, Number(nextUnitPrice) || 0)).toFixed(2),
     );
   }
 
   return (
     <form action={action} className="card transaction-form">
+      {isBankTransaction && <p className="muted-text">Owner deposits and withdrawals change owner equity. They do not transfer money between two company accounts.</p>}
       <fieldset className="transaction-types">
         <legend>Transaction Type</legend>
         <div className="transaction-type-grid">
@@ -183,7 +185,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
             </div>
           )}
 
-          {isBankTransaction && (
+          {needsBankAccount && (
             <div className="field">
               <label htmlFor="bankAccountId">Bank / Cash Account *</label>
               <select
@@ -193,13 +195,16 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
                 required
               >
                 <option value="">Select account</option>
-                {accounts.map((account) => (
+                {accounts.filter((account) => isBankTransaction || !account.isCashAccount).map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
                 ))}
               </select>
             </div>
+          )}
+          {needsBankAccount && !accounts.some((account) => !account.isCashAccount) && !isBankTransaction && (
+            <p className="muted-text">No bank account is configured. Ask an administrator to add one in <Link href="/settings">Settings</Link>.</p>
           )}
 
           {allowsProduct && (
@@ -286,19 +291,15 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
               <label htmlFor="paymentMethod">Payment Method</label>
               <select
                 className="select"
-                defaultValue={
-                  ["customer_receipt", "supplier_payment"].includes(type)
-                    ? "cash"
-                    : "credit"
-                }
                 id="paymentMethod"
                 name="paymentMethod"
-                key={type}
+                value={paymentMethod}
+                onChange={(event) => setPaymentMethod(event.target.value)}
               >
                 <option value="cash">Cash</option>
                 <option value="bank">Bank</option>
                 <option value="cheque">Cheque</option>
-                <option value="credit">Credit / Ledger</option>
+                {!isBankTransaction && !["customer_receipt", "supplier_payment"].includes(type) && <option value="credit">Credit / Ledger</option>}
               </select>
             </div>
           </div>
@@ -327,6 +328,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
                 step="0.01"
                 type="number"
                 value={amount}
+                readOnly={Boolean(productId)}
                 required
               />
             </div>

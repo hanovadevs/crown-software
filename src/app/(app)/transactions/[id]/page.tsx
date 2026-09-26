@@ -44,8 +44,8 @@ export default async function TransactionDetailPage({
         </div>
         <div className="card-actions detail-actions">
           <WhatsAppLedgerButton phone={item.partyPhone} message={whatsappMessage} triggerPrint={false} />
-          <Link className="button button-secondary" href={`/transactions/${id}/edit`}><Pencil size={16} /> Edit</Link>
-          <DeleteButton action={deleteTransactionAction.bind(null, id)} confirmMessage={`Delete ${item.number} and reverse its stock and accounting effects?`} label={`Delete ${item.number}`} />
+          {item.status === "posted" && <Link className="button button-secondary" href={`/transactions/${id}/edit`}><Pencil size={16} /> Edit</Link>}
+          {item.status === "posted" && <DeleteButton action={deleteTransactionAction.bind(null, id)} confirmMessage={`Reverse ${item.number}? A dated reversal will offset its stock and journal entries.`} label={`Reverse ${item.number}`} />}
         </div>
       </div>
       <section className="card panel transaction-detail">
@@ -98,4 +98,3 @@ export default async function TransactionDetailPage({
     </main>
   );
 }
-

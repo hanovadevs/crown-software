@@ -148,7 +148,7 @@ export async function listNotifications(userId: string) {
           phone: parties.phone,
           receivable: sql<string>`
             ${parties.openingReceivable}
-            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND status = 'posted' AND type = 'sale'), 0)
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND status = 'posted' AND type = 'sale' AND payment_method = 'credit'), 0)
             - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE party_id = ${parties.id} AND status = 'posted' AND type = 'customer_receipt'), 0)
           `,
         })

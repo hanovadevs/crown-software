@@ -1,24 +1,32 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+
+function subscribeToTheme(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener("crown-theme-change", callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener("crown-theme-change", callback);
+  };
+}
+
+function savedTheme(): "dark" | "light" {
+  return localStorage.getItem("crown_theme") === "dark" ? "dark" : "light";
+}
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const theme = useSyncExternalStore(subscribeToTheme, savedTheme, () => "light");
 
   useEffect(() => {
-    // Read saved theme or default to light
-    const saved = localStorage.getItem("crown_theme") as "dark" | "light" | null;
-    const initial = saved || "light";
-    setTheme(initial);
-    document.documentElement.setAttribute("data-theme", initial);
-  }, []);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   function toggleTheme() {
     const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
     localStorage.setItem("crown_theme", next);
-    document.documentElement.setAttribute("data-theme", next);
+    window.dispatchEvent(new Event("crown-theme-change"));
   }
 
   return (

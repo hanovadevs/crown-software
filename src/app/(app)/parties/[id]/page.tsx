@@ -50,7 +50,7 @@ export default async function PartyDetailPage({
           <Link className="button button-secondary" href={`/reports/print?type=party-ledger&partyId=${id}`}><FileText size={16} /> Print ledger</Link>
           <Link className="button button-primary" href="/transactions/new"><ArrowLeftRight size={16} /> New transaction</Link>
           <Link className="button button-secondary" href={`/parties/${id}/edit`}><Pencil size={16} /> Edit</Link>
-          <DeleteButton action={deletePartyAction.bind(null, id)} confirmMessage={`Delete ${party.name} and all linked records?`} label={`Delete ${party.name}`} />
+          <DeleteButton action={deletePartyAction.bind(null, id)} confirmMessage={`Archive ${party.name}? Historical transactions and bills will be kept.`} label={`Archive ${party.name}`} />
         </div>
       </div>
 

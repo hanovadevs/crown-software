@@ -8,7 +8,7 @@ import { ProductionForm } from "./production-form";
 export const metadata: Metadata = { title: "Production Batch Run Launcher" };
 
 export default async function ProductionPage() {
-  const user = await requireUser();
+  await requireUser();
   const { warehouseList, activeBoms } = await getProductionFormData();
 
   return (

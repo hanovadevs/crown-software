@@ -12,21 +12,20 @@ export async function getDashboardSummary() {
           (SELECT COUNT(*) FROM products WHERE is_active) AS products,
           (SELECT COUNT(*) FROM parties WHERE is_customer AND is_active) AS customers,
           (SELECT COUNT(*) FROM parties WHERE is_supplier AND is_active) AS suppliers,
-          GREATEST(
-            COALESCE((SELECT SUM(opening_receivable) FROM parties WHERE is_active), 0)
-              + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'sale'), 0)
-              - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'customer_receipt'), 0),
-            0
-          ) AS receivables,
-          GREATEST(
-            COALESCE((SELECT SUM(opening_payable) FROM parties WHERE is_active), 0)
-              + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'purchase'), 0)
-              - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type = 'supplier_payment'), 0),
-            0
-          ) AS payables,
+          COALESCE((SELECT SUM(GREATEST(
+            p.opening_receivable
+              + COALESCE((SELECT SUM(total_amount) FROM transactions t WHERE t.party_id = p.id AND t.status = 'posted' AND t.type = 'sale' AND t.payment_method = 'credit'), 0)
+              - COALESCE((SELECT SUM(total_amount) FROM transactions t WHERE t.party_id = p.id AND t.status = 'posted' AND t.type = 'customer_receipt'), 0),
+            0)) FROM parties p WHERE p.is_active), 0) AS receivables,
+          COALESCE((SELECT SUM(GREATEST(
+            p.opening_payable
+              + COALESCE((SELECT SUM(total_amount) FROM transactions t WHERE t.party_id = p.id AND t.status = 'posted' AND t.type = 'purchase' AND t.payment_method = 'credit'), 0)
+              - COALESCE((SELECT SUM(total_amount) FROM transactions t WHERE t.party_id = p.id AND t.status = 'posted' AND t.type = 'supplier_payment'), 0),
+            0)) FROM parties p WHERE p.is_active), 0) AS payables,
           COALESCE((SELECT SUM(opening_balance) FROM bank_accounts WHERE is_active), 0)
-            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type IN ('bank_deposit', 'customer_receipt')), 0)
-            - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND type IN ('bank_withdrawal', 'supplier_payment')), 0)
+            + COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND (type IN ('bank_deposit', 'customer_receipt') OR (type = 'sale' AND payment_method <> 'credit'))), 0)
+            - COALESCE((SELECT SUM(total_amount) FROM transactions WHERE status = 'posted' AND (type IN ('bank_withdrawal', 'supplier_payment') OR (type = 'purchase' AND payment_method <> 'credit'))), 0)
+            - COALESCE((SELECT SUM(paid_amount) FROM worker_payments), 0)
             AS company_balance
       `),
       db.execute(sql`

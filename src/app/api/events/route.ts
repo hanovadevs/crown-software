@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   try {
     client = await pool.connect();
     await client.query("LISTEN crown_updates");
-  } catch (err) {
+  } catch {
     if (client) {
       try {
         client.release();
