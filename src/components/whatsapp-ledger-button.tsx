@@ -139,7 +139,8 @@ export function WhatsAppLedgerButton({
       </button>
     )}
 
-    {triggerPrint && pdf && status !== "generating" && status !== "error" && <div className="whatsapp-step-banner no-print" role="status">
+    {triggerPrint && pdf && (status === "ready" || status === "opened" || status === "handoff") && <div className="whatsapp-step-banner no-print" role="status">
+      <button className="notice-close whatsapp-banner-dismiss" type="button" aria-label="Dismiss guidance" onClick={() => setStatus("idle")}><X size={18} /></button>
       <div className="step-banner-content">
         <div className="step-banner-icon step-check"><Check size={18} /></div>
         <div className="step-banner-text">
@@ -153,16 +154,16 @@ export function WhatsAppLedgerButton({
       <div className="step-banner-actions">
         <button className="button button-secondary" type="button" onClick={() => triggerPdfDownload(pdf.blob, pdf.fileName)}><Download size={14} /> Download again</button>
         {canShareFile && <button className="button button-secondary" type="button" onClick={() => void shareFile()}><Share2 size={14} /> Device share</button>}
-        <button className="notice-close" type="button" aria-label="Change recipient" title="Change recipient" onClick={() => { setPhoneInput(phoneOverride ?? phone ?? ""); setShowPhoneModal(true); }}><MessageCircle size={14} /></button>
-        <button className="notice-close" type="button" aria-label="Dismiss guidance" onClick={() => setStatus("idle")}><X size={14} /></button>
+        <button className="button button-secondary" type="button" onClick={() => { setPhoneInput(phoneOverride ?? phone ?? ""); setShowPhoneModal(true); }}><MessageCircle size={14} /> Change recipient</button>
       </div>
     </div>}
 
     {status === "error" && <div className="whatsapp-step-banner whatsapp-error-banner no-print" role="alert">
+      <button className="notice-close whatsapp-banner-dismiss" type="button" aria-label="Dismiss error" onClick={() => setStatus("idle")}><X size={18} /></button>
       <div className="step-banner-content"><div className="step-banner-icon step-error"><X size={18} /></div>
         <div className="step-banner-text"><strong>PDF could not be prepared</strong><span>{error}</span></div>
       </div>
-      <div className="step-banner-actions">{chatUrl && <a className="button whatsapp-button" href={chatUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Open chat without PDF</a>}<button className="notice-close" type="button" aria-label="Dismiss error" onClick={() => setStatus("idle")}><X size={14} /></button></div>
+      <div className="step-banner-actions">{chatUrl && <a className="button whatsapp-button" href={chatUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Open chat without PDF</a>}</div>
     </div>}
 
     {showPhoneModal && <div className="whatsapp-modal-overlay no-print" onClick={() => setShowPhoneModal(false)}>

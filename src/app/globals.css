@@ -3521,24 +3521,27 @@ td.amount-cell {
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: grid;
+  gap: 16px;
+  width: min(480px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  box-sizing: border-box;
   background: #111c24;
   border: 1px solid #20b85a;
   color: #f1f5f9;
-  padding: 16px 20px;
-  border-radius: 12px;
+  padding: 20px;
+  border-radius: 16px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
   font-size: 13px;
-  max-width: 520px;
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .whatsapp-step-banner .step-banner-content {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  flex: 1;
+  min-width: 0;
+  padding-right: 28px;
 }
 .whatsapp-step-banner .step-banner-icon {
   width: 34px;
@@ -3554,19 +3557,25 @@ td.amount-cell {
 .whatsapp-step-banner .step-banner-text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.whatsapp-step-banner .step-banner-text strong { font-size: 14px; }
-.whatsapp-step-banner .step-banner-text span { color: #94a3b8; font-size: 12.5px; line-height: 1.4; }
+.whatsapp-step-banner .step-banner-text strong { font-size: 15px; line-height: 1.35; }
+.whatsapp-step-banner .step-banner-text span { color: #a5b4c5; font-size: 13px; line-height: 1.45; }
 .whatsapp-step-banner .step-banner-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
-.whatsapp-step-banner .step-banner-actions .button { font-size: 12.5px; padding: 7px 14px; white-space: nowrap; }
-.whatsapp-step-banner .notice-close { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; }
+.whatsapp-step-banner .step-banner-actions .button { flex: 1 1 190px; min-width: 0; max-width: 100%; justify-content: center; font-size: 13px; padding: 10px 12px; white-space: normal; text-align: center; }
+.whatsapp-step-banner .step-banner-actions .button svg { flex-shrink: 0; }
+.whatsapp-step-banner .notice-close { background: none; border: none; color: #a5b4c5; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 .whatsapp-step-banner .notice-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.1); }
+.whatsapp-step-banner .notice-close:focus-visible { outline: 2px solid #20b85a; outline-offset: 2px; }
+.whatsapp-step-banner .whatsapp-banner-dismiss { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; }
 .whatsapp-done-banner { border-color: rgba(32, 184, 90, 0.4); }
 
 @media (max-width: 720px) {
@@ -3574,12 +3583,9 @@ td.amount-cell {
     left: 12px;
     right: 12px;
     bottom: 12px;
-    max-width: none;
-    flex-direction: column;
-    align-items: stretch;
+    width: auto;
+    max-height: calc(100dvh - 24px);
   }
-  .whatsapp-step-banner .step-banner-actions { flex-wrap: wrap; }
-  .whatsapp-step-banner .step-banner-actions .button { white-space: normal; }
 }
 
 .whatsapp-modal-steps {

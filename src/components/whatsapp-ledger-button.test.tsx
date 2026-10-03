@@ -40,6 +40,18 @@ describe("WhatsApp document handoff", () => {
     expect(screen.queryByText(/sent to WhatsApp/i)).toBeNull();
   });
 
+  it("dismisses the PDF guidance while keeping the prepared chat action available", async () => {
+    render(<WhatsAppLedgerButton phone="03001234567" recipientName="ABC Motors" message="Invoice" documentName="INV-1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send to WhatsApp" }));
+    await screen.findByText("PDF ready for WhatsApp");
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss guidance" }));
+
+    expect(screen.queryByText("PDF ready for WhatsApp")).toBeNull();
+    expect(screen.getByRole("link", { name: "Download PDF & open WhatsApp chat" })).toBeDefined();
+    expect(generateElementPdf).toHaveBeenCalledTimes(1);
+  });
+
   it("asks for a number only when no saved contact exists", async () => {
     render(<WhatsAppLedgerButton message="Invoice" documentName="INV-1" />);
     fireEvent.click(screen.getByRole("button", { name: "Send to WhatsApp" }));
@@ -53,6 +65,8 @@ describe("WhatsApp document handoff", () => {
   it("automatically prepares the report once without repeatedly reopening the flow", async () => {
     render(<WhatsAppLedgerButton phone="03001234567" message="Report" autoTrigger />);
     await screen.findByRole("link", { name: "Download PDF & open WhatsApp chat" });
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss guidance" }));
+    expect(screen.queryByText("PDF ready for WhatsApp")).toBeNull();
     expect(generateElementPdf).toHaveBeenCalledTimes(1);
   });
 });
