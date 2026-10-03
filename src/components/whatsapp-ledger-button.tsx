@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { generateElementPdf, triggerPdfDownload, type GeneratedPdfResult } from "@/lib/pdf-generator";
 import { normalizeWhatsAppNumber, whatsappUrl } from "@/lib/whatsapp";
 
-type Status = "idle" | "generating" | "ready" | "opened" | "handoff" | "error";
+type Status = "idle" | "generating" | "ready" | "opened" | "handoff" | "dismissed" | "error";
 
 function supportsFileShare(file: File | null): boolean {
   if (!file || typeof navigator === "undefined" || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") return false;
@@ -114,7 +114,7 @@ export function WhatsAppLedgerButton({
       onClick={(event) => {
         try {
           if (triggerPrint && pdf) triggerPdfDownload(pdf.blob, pdf.fileName);
-          setStatus("opened");
+          setStatus((current) => current === "dismissed" ? current : "opened");
         } catch (cause) {
           event.preventDefault();
           setError(cause instanceof Error ? cause.message : "The PDF could not be downloaded.");
@@ -140,7 +140,7 @@ export function WhatsAppLedgerButton({
     )}
 
     {triggerPrint && pdf && (status === "ready" || status === "opened" || status === "handoff") && <div className="whatsapp-step-banner no-print" role="status">
-      <button className="notice-close whatsapp-banner-dismiss" type="button" aria-label="Dismiss guidance" onClick={() => setStatus("idle")}><X size={18} /></button>
+      <button className="notice-close whatsapp-banner-dismiss" type="button" aria-label="Dismiss guidance" onClick={() => setStatus("dismissed")}><X size={18} /></button>
       <div className="step-banner-content">
         <div className="step-banner-icon step-check"><Check size={18} /></div>
         <div className="step-banner-text">
@@ -163,7 +163,7 @@ export function WhatsAppLedgerButton({
       <div className="step-banner-content"><div className="step-banner-icon step-error"><X size={18} /></div>
         <div className="step-banner-text"><strong>PDF could not be prepared</strong><span>{error}</span></div>
       </div>
-      <div className="step-banner-actions">{chatUrl && <a className="button whatsapp-button" href={chatUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Open chat without PDF</a>}</div>
+      {chatUrl && <div className="step-banner-actions"><a className="button whatsapp-button" href={chatUrl} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> Open chat without PDF</a></div>}
     </div>}
 
     {showPhoneModal && <div className="whatsapp-modal-overlay no-print" onClick={() => setShowPhoneModal(false)}>
