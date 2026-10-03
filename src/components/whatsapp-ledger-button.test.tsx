@@ -48,7 +48,10 @@ describe("WhatsApp document handoff", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss guidance" }));
 
     expect(screen.queryByText("PDF ready for WhatsApp")).toBeNull();
-    expect(screen.getByRole("link", { name: "Download PDF & open WhatsApp chat" })).toBeDefined();
+    const link = screen.getByRole("link", { name: "Download PDF & open WhatsApp chat" });
+    link.addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(link);
+    expect(screen.queryByText("PDF ready for WhatsApp")).toBeNull();
     expect(generateElementPdf).toHaveBeenCalledTimes(1);
   });
 
