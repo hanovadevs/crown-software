@@ -18,6 +18,7 @@ and the database foundation for manufacturing.
 - Invoices and quotations with multiple product or custom lines
 - Configurable tax, shipping, discounts, print and PDF-ready layouts
 - CSV and printable reports
+- WhatsApp document handoff using saved party or worker numbers: prepare the PDF, open the addressed chat, then attach and send the downloaded file. Device file sharing is available where supported; the browser cannot confirm WhatsApp delivery.
 - Workers and salary foundations
 - Full PostgreSQL custom-format export and guarded database restore
 - Automatic pre-restore recovery copies with newest-five retention
