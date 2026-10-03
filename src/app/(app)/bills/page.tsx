@@ -27,13 +27,13 @@ export default async function BillsHistoryPage({
         description="New issued invoices post sales and stock. Quotations and older unlinked invoices remain documents; record payments in Transactions."
         action={
           <Link className="button button-primary" href="/bills/new">
-            <Plus size={19} /> Generate New Bill
+            <Plus size={19} /> New Bill
           </Link>
         }
       />
 
       {/* Summary Cards */}
-      <section className="stats-grid" aria-label="Invoice Overview">
+      <section className="stats-grid bills-stats-grid" aria-label="Invoice Overview">
         <StatCard
           icon={ReceiptText}
           label="Total Documents Generated"

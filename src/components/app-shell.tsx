@@ -114,6 +114,10 @@ export function AppShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navGroups = user.role === "inventory" ? stockManagerNavGroups : adminNavGroups;
+  const activeHref = navGroups.flatMap((group) => group.items).reduce<string | null>((best, item) => {
+    const matches = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    return matches && item.href.length > (best?.length ?? 0) ? item.href : best;
+  }, null);
 
   // Background prefetch all core routes for instant tab-like page switching
   useEffect(() => {
@@ -177,15 +181,14 @@ export function AppShell({
             <div className="nav-group" key={group.title}>
               {!sidebarCollapsed && <span className="nav-group-title">{group.title}</span>}
               {group.items.map(({ href, label, icon: Icon }) => {
-                const active =
-                  pathname === href ||
-                  (href !== "/dashboard" && pathname.startsWith(href.replace("/new", "")));
+                const active = href === activeHref;
                 return (
                   <Link
                     key={href}
                     href={href}
                     prefetch={true}
                     className={`sidebar-nav-link ${active ? "active" : ""}`}
+                    aria-current={active ? "page" : undefined}
                     onClick={() => setMobileMenuOpen(false)}
                     title={sidebarCollapsed ? label : undefined}
                   >
