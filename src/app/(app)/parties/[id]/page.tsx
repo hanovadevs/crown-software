@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowLeftRight, Building2, FileText, Mail, MapPin, Pencil, Phone } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, Building2, FileText, Mail, MapPin, MessageCircle, Pencil, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,7 +6,6 @@ import { getParty } from "@/db/business-queries";
 import { formatDate, formatPKR } from "@/lib/utils";
 import { deletePartyAction } from "@/app/actions/business";
 import { DeleteButton } from "@/components/delete-button";
-import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 
 export const metadata: Metadata = { title: "Party Ledger" };
 
@@ -19,14 +18,6 @@ export default async function PartyDetailPage({
   const result = await getParty(id);
   if (!result) notFound();
   const { party, activity, receivable, payable } = result;
-  const netBalance = receivable - payable;
-  const whatsappMessage = [
-    `Party Ledger Summary — ${party.name}`,
-    `Receivable: ${formatPKR(receivable)}`,
-    `Payable: ${formatPKR(payable)}`,
-    `Net Balance: ${formatPKR(Math.abs(netBalance))} ${netBalance >= 0 ? "Receivable" : "Payable"}`,
-    `Statement Date: ${formatDate(new Date())}`,
-  ].join("\n");
 
   return (
     <main className="page">
@@ -46,7 +37,7 @@ export default async function PartyDetailPage({
           </p>
         </div>
         <div className="card-actions detail-actions">
-          <WhatsAppLedgerButton phone={party.phone} message={whatsappMessage} triggerPrint={false} />
+          <Link className="button whatsapp-button" href={`/reports/print?type=party-ledger&partyId=${id}&autoWhatsApp=1`}><MessageCircle size={17} /> Share ledger PDF</Link>
           <Link className="button button-secondary" href={`/reports/print?type=party-ledger&partyId=${id}`}><FileText size={16} /> Print ledger</Link>
           <Link className="button button-primary" href="/transactions/new"><ArrowLeftRight size={16} /> New transaction</Link>
           <Link className="button button-secondary" href={`/parties/${id}/edit`}><Pencil size={16} /> Edit</Link>

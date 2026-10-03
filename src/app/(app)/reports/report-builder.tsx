@@ -69,7 +69,7 @@ export function ReportBuilder({ options, userRole }: { options: Options; userRol
           <h2>Export Options</h2>
           <button className="button button-success" formAction="/api/reports/export" type="submit"><Download size={20} /> Download CSV</button>
           <button className="button button-primary" formAction="/reports/print" type="submit"><Printer size={20} /> Print / Save PDF</button>
-          <button className="button whatsapp-button" formAction="/reports/print?autoWhatsApp=1" type="submit"><MessageCircle size={20} /> Send PDF to WhatsApp</button>
+          <button className="button whatsapp-button" formAction="/reports/print" name="autoWhatsApp" value="1" type="submit"><MessageCircle size={20} /> Prepare PDF for WhatsApp</button>
           <div className="export-note"><FileText size={18} /> Filters apply to CSV, PDF, and WhatsApp sharing.</div>
         </section>
       </aside>

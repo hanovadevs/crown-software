@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { PrintButton } from "@/components/print-button";
 import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 import { requireUser } from "@/lib/auth";
+import { db } from "@/db";
+import { parties, workers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { formatPKR } from "@/lib/utils";
 import {
   buildReport,
@@ -39,7 +42,7 @@ export default async function PrintReportPage({
     ? (rawType as ReportType)
     : "transactions";
 
-  const report = await buildReport(type, {
+  const reportPromise = buildReport(type, {
     start: params.start,
     end: params.end,
     partyId: user.role === "inventory" ? undefined : params.partyId,
@@ -47,6 +50,13 @@ export default async function PrintReportPage({
     workerId: user.role === "inventory" ? undefined : params.workerId,
     warehouseId: params.warehouseId,
   });
+  const selectedPartyPromise = user.role !== "inventory" && params.partyId
+    ? db.select({ name: parties.name, phone: parties.phone }).from(parties).where(eq(parties.id, params.partyId)).limit(1)
+    : Promise.resolve([]);
+  const selectedWorkerPromise = user.role !== "inventory" && params.workerId
+    ? db.select({ name: workers.name, phone: workers.phone }).from(workers).where(eq(workers.id, params.workerId)).limit(1)
+    : Promise.resolve([]);
+  const [report, selectedParties, selectedWorkers] = await Promise.all([reportPromise, selectedPartyPromise, selectedWorkerPromise]);
 
   const periodText =
     params.start || params.end
@@ -56,7 +66,10 @@ export default async function PrintReportPage({
   const party = report.partyInfo;
   const stats = report.summaryStats;
 
-  const targetPhone = party?.phone || null;
+  const selectedParty = selectedParties[0];
+  const selectedWorker = selectedWorkers[0];
+  const targetPhone = selectedParty?.phone || selectedWorker?.phone || party?.phone || null;
+  const recipientName = selectedParty?.name || selectedWorker?.name || party?.name || null;
 
   const whatsappMessage = [
     `${report.title} — ${periodText}`,
@@ -65,7 +78,6 @@ export default async function PrintReportPage({
       ? `Net Balance: ${formatPKR(Math.abs(stats.closingBalance))} ${stats.closingBalance >= 0 ? "Receivable" : "Payable"}`
       : null,
     "",
-    "Please find the detailed PDF report attached.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -79,6 +91,7 @@ export default async function PrintReportPage({
         <PrintButton label="Print / Save PDF" />
         <WhatsAppLedgerButton
           phone={targetPhone}
+          recipientName={recipientName}
           message={whatsappMessage}
           label="Send to WhatsApp"
           documentName={`${report.title.replace(/\s+/g, "_")}_${party ? party.name.replace(/\s+/g, "_") : "Report"}`}

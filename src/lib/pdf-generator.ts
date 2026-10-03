@@ -55,7 +55,7 @@ export async function generateElementPdf(
       windowWidth: 794,
     });
 
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    if (!canvas.width || !canvas.height) throw new Error("The document rendered as an empty page.");
 
     // A4 dimensions in mm: 210 x 297
     const pdf = new jsPDF({
@@ -69,39 +69,19 @@ export async function generateElementPdf(
     const pdfHeight = 297;
     const margin = 8; // 8mm margin
     const contentWidth = pdfWidth - margin * 2;
-    const contentHeight = (canvas.height * contentWidth) / canvas.width;
+    const pageHeightPixels = Math.floor(((pdfHeight - margin * 2) * canvas.width) / contentWidth);
+    const pageCanvas = document.createElement("canvas");
+    pageCanvas.width = canvas.width;
+    const context = pageCanvas.getContext("2d");
+    if (!context) throw new Error("The browser could not render the PDF pages.");
 
-    let heightLeft = contentHeight;
-    let position = margin;
-
-    // First page
-    pdf.addImage(
-      imgData,
-      "JPEG",
-      margin,
-      position,
-      contentWidth,
-      contentHeight,
-      undefined,
-      "FAST",
-    );
-    heightLeft -= pdfHeight - margin * 2;
-
-    // Subsequent pages if content exceeds 1 page
-    while (heightLeft > 0) {
-      position = heightLeft - contentHeight + margin;
-      pdf.addPage();
-      pdf.addImage(
-        imgData,
-        "JPEG",
-        margin,
-        position,
-        contentWidth,
-        contentHeight,
-        undefined,
-        "FAST",
-      );
-      heightLeft -= pdfHeight - margin * 2;
+    for (let top = 0, page = 0; top < canvas.height; top += pageHeightPixels, page++) {
+      const sliceHeight = Math.min(pageHeightPixels, canvas.height - top);
+      pageCanvas.height = sliceHeight;
+      context.drawImage(canvas, 0, top, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+      if (page > 0) pdf.addPage();
+      pdf.addImage(pageCanvas.toDataURL("image/jpeg", 0.9), "JPEG", margin, margin,
+        contentWidth, (sliceHeight * contentWidth) / canvas.width, undefined, "FAST");
     }
 
     const cleanFileName = fileName.endsWith(".pdf") ? fileName : `${fileName}.pdf`;

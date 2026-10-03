@@ -30,7 +30,6 @@ export default async function GatePassDetailPage({
     gatePass.partyName ? `Party: ${gatePass.partyName}` : null,
     gatePass.vehicleNumber ? `Vehicle: ${gatePass.vehicleNumber}` : null,
     "",
-    "Please find the detailed Gate Pass PDF attached.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -50,6 +49,7 @@ export default async function GatePassDetailPage({
           <PrintButton label="Print / Save PDF" />
           <WhatsAppLedgerButton
             phone={gatePass.partyPhone || gatePass.driverPhone}
+            recipientName={gatePass.partyPhone ? gatePass.partyName : gatePass.driverName}
             message={whatsappMessage}
             documentName={gatePass.number}
           />

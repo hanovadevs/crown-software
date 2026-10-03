@@ -1,4 +1,4 @@
-import { Building2, Eye, Mail, MapPin, Pencil, Phone, Plus } from "lucide-react";
+import { Building2, Eye, Mail, MapPin, MessageCircle, Pencil, Phone, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
@@ -6,7 +6,6 @@ import { DeleteButton } from "@/components/delete-button";
 import { deletePartyAction } from "@/app/actions/business";
 import { listParties } from "@/db/business-queries";
 import { formatPKR } from "@/lib/utils";
-import { WhatsAppLedgerButton } from "@/components/whatsapp-ledger-button";
 
 export const metadata: Metadata = { title: "Customers & Suppliers" };
 
@@ -59,13 +58,6 @@ export default async function PartiesPage({
         <section className="party-grid" aria-label="Parties">
           {partyList.map((party) => {
             const both = party.isCustomer && party.isSupplier;
-            const netBalance = Number(party.receivable) - Number(party.payable);
-            const whatsappMessage = [
-              `Party Ledger Summary — ${party.name}`,
-              `Receivable: ${formatPKR(party.receivable)}`,
-              `Payable: ${formatPKR(party.payable)}`,
-              `Net Balance: ${formatPKR(Math.abs(netBalance))} ${netBalance >= 0 ? "Receivable" : "Payable"}`,
-            ].join("\n");
             return (
               <article className="card party-card" key={party.id}>
                 <div className="party-card-head">
@@ -153,7 +145,7 @@ export default async function PartiesPage({
                   )}
                 </div>
                 <div className="party-card-footer">
-                  <WhatsAppLedgerButton phone={party.phone} message={whatsappMessage} triggerPrint={false} />
+                  <Link className="button whatsapp-button" href={`/reports/print?type=party-ledger&partyId=${party.id}&autoWhatsApp=1`}><MessageCircle size={17} /> Share ledger PDF</Link>
                   <Link className="button button-secondary" href={`/reports/print?type=party-ledger&partyId=${party.id}`}>View Ledger</Link>
                 </div>
               </article>

@@ -55,12 +55,3 @@ export function whatsappUrl(phone: string | null | undefined, message: string): 
   const number = normalizeWhatsAppNumber(phone);
   return number ? `https://wa.me/${number}?text=${encodeURIComponent(message)}` : null;
 }
-
-/**
- * Generates native mobile deep-link URL (whatsapp://send?phone=...&text=...).
- * This opens the WhatsApp mobile app directly on Android & iOS without opening a blank browser tab.
- */
-export function whatsappNativeUrl(phone: string | null | undefined, message: string): string | null {
-  const number = normalizeWhatsAppNumber(phone);
-  return number ? `whatsapp://send?phone=${number}&text=${encodeURIComponent(message)}` : null;
-}

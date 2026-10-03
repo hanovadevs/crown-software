@@ -3553,6 +3553,19 @@ td.amount-cell {
 .whatsapp-step-banner .notice-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.1); }
 .whatsapp-done-banner { border-color: rgba(32, 184, 90, 0.4); }
 
+@media (max-width: 720px) {
+  .whatsapp-step-banner {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .whatsapp-step-banner .step-banner-actions { flex-wrap: wrap; }
+  .whatsapp-step-banner .step-banner-actions .button { white-space: normal; }
+}
+
 .whatsapp-modal-steps {
   display: flex;
   flex-direction: column;
@@ -5799,6 +5812,5 @@ td.amount-cell {
 .pdf-exporting .notice-text {
   color: #b91c1c !important;
 }
-
 
 

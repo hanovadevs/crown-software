@@ -24,7 +24,6 @@ export default async function TransactionDetailPage({
     `Amount: ${formatPKR(item.amount)}`,
     `Date: ${formatDate(item.date)}`,
     "",
-    "Please find the detailed receipt attached.",
   ].filter(Boolean).join("\n");
 
   return (
@@ -43,7 +42,7 @@ export default async function TransactionDetailPage({
           <p className="page-description">{item.description}</p>
         </div>
         <div className="card-actions detail-actions">
-          <WhatsAppLedgerButton phone={item.partyPhone} message={whatsappMessage} triggerPrint={false} />
+          <WhatsAppLedgerButton phone={item.partyPhone} recipientName={item.partyName} message={whatsappMessage} label="Message transaction" triggerPrint={false} />
           {item.status === "posted" && item.type !== "adjustment" && !item.linkedBillNumber && <Link className="button button-secondary" href={`/transactions/${id}/edit`}><Pencil size={16} /> Edit</Link>}
           {item.status === "posted" && item.type !== "adjustment" && !item.linkedBillNumber && <DeleteButton action={deleteTransactionAction.bind(null, id)} confirmMessage={`Reverse ${item.number}? A dated reversal will offset its stock and journal entries.`} label={`Reverse ${item.number}`} />}
         </div>

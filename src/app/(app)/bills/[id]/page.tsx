@@ -53,7 +53,6 @@ export default async function BillPage({
     `Date: ${formatDate(bill.billDate)}`,
     `Net Total: ${formatPKR(bill.totalAmount)}`,
     "",
-    "Please find the detailed invoice PDF attached.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -77,6 +76,7 @@ export default async function BillPage({
           <PrintButton label="Print / Save PDF" />
           <WhatsAppLedgerButton
             phone={bill.party.phone}
+            recipientName={bill.party.name}
             message={whatsappMessage}
             documentName={bill.billNumber}
           />
