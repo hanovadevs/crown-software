@@ -145,7 +145,7 @@ export async function listProducts(search = "") {
     .orderBy(products.name);
 }
 
-export async function getTransactionFormOptions() {
+export async function getTransactionFormOptions(keep?: { partyId?: string | null; productId?: string | null; bankAccountId?: string | null }) {
   const [partyOptions, productOptions, accountOptions] = await Promise.all([
     db
       .select({
@@ -155,7 +155,7 @@ export async function getTransactionFormOptions() {
         isSupplier: parties.isSupplier,
       })
       .from(parties)
-      .where(eq(parties.isActive, true))
+      .where(keep?.partyId ? or(eq(parties.isActive, true), eq(parties.id, keep.partyId)) : eq(parties.isActive, true))
       .orderBy(parties.name),
     db
       .select({
@@ -168,7 +168,7 @@ export async function getTransactionFormOptions() {
         isPurchasable: products.isPurchasable,
       })
       .from(products)
-      .where(eq(products.isActive, true))
+      .where(keep?.productId ? or(eq(products.isActive, true), eq(products.id, keep.productId)) : eq(products.isActive, true))
       .orderBy(products.name),
     db
       .select({
@@ -177,7 +177,7 @@ export async function getTransactionFormOptions() {
         isCashAccount: bankAccounts.isCashAccount,
       })
       .from(bankAccounts)
-      .where(eq(bankAccounts.isActive, true))
+      .where(keep?.bankAccountId ? or(eq(bankAccounts.isActive, true), eq(bankAccounts.id, keep.bankAccountId)) : eq(bankAccounts.isActive, true))
       .orderBy(bankAccounts.name),
   ]);
 
@@ -270,6 +270,12 @@ export async function getTransactionDetail(id: string) {
       amount: transactions.totalAmount,
       date: transactions.transactionDate,
       paymentMethod: transactions.paymentMethod,
+      bankAccountId: transactions.bankAccountId,
+      warehouseId: transactions.warehouseId,
+      version: transactions.version,
+      reversedTransactionId: transactions.reversedTransactionId,
+      correctedFromId: sql<string | null>`(SELECT previous.id FROM transactions previous WHERE previous.reversed_transaction_id = ${transactions.id} LIMIT 1)`,
+      linkedBillNumber: sql<string | null>`(SELECT bill_number FROM bills WHERE posted_transaction_id = ${transactions.id} LIMIT 1)`,
       createdAt: transactions.createdAt,
     })
     .from(transactions)

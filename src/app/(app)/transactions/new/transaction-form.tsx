@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import {
   createTransactionAction,
+  updateTransactionAction,
   type FormState,
 } from "@/app/actions/business";
 import { formatPKR } from "@/lib/utils";
@@ -43,6 +44,12 @@ type Props = {
   }>;
   accounts: Array<{ id: string; name: string; isCashAccount: boolean }>;
   today: string;
+  initialItem?: {
+    id: string; version: number; number: string; type: TransactionType;
+    partyId: string | null; productId: string | null; bankAccountId: string | null;
+    quantity: string | null; unitPrice: string | null; amount: string; date: string;
+    paymentMethod: string; description: string; reference: string | null;
+  };
 };
 
 const initialState: FormState = {};
@@ -55,17 +62,17 @@ const typeOptions = [
   { value: "bank_withdrawal", label: "Owner Withdrawal", icon: BanknoteArrowUp },
 ] satisfies Array<{ value: TransactionType; label: string; icon: typeof ArrowUpRight }>;
 
-export function TransactionForm({ parties, products, accounts, today }: Props) {
+export function TransactionForm({ parties, products, accounts, today, initialItem }: Props) {
   const [state, action, pending] = useActionState(
-    createTransactionAction,
+    initialItem ? updateTransactionAction.bind(null, initialItem.id) : createTransactionAction,
     initialState,
   );
-  const [type, setType] = useState<TransactionType>("sale");
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
-  const [unitPrice, setUnitPrice] = useState("0");
-  const [amount, setAmount] = useState("0");
-  const [paymentMethod, setPaymentMethod] = useState("credit");
+  const [type, setType] = useState<TransactionType>(initialItem?.type ?? "sale");
+  const [productId, setProductId] = useState(initialItem?.productId ?? "");
+  const [quantity, setQuantity] = useState(initialItem?.quantity ?? "1");
+  const [unitPrice, setUnitPrice] = useState(initialItem?.unitPrice ?? "0");
+  const [amount, setAmount] = useState(initialItem?.amount ?? "0");
+  const [paymentMethod, setPaymentMethod] = useState(initialItem?.paymentMethod ?? "credit");
 
   const selectedProduct = products.find((product) => product.id === productId);
   const isPartyTransaction = [
@@ -75,7 +82,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
     "supplier_payment",
   ].includes(type);
   const isBankTransaction = ["bank_deposit", "bank_withdrawal"].includes(type);
-  const needsBankAccount = isBankTransaction || paymentMethod === "bank" || paymentMethod === "cheque";
+  const needsBankAccount = isBankTransaction || paymentMethod === "bank" || paymentMethod === "cheque" || (Boolean(initialItem) && paymentMethod === "cash");
   const allowsProduct = ["sale", "purchase"].includes(type);
   const partyOptions = useMemo(
     () =>
@@ -138,6 +145,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
 
   return (
     <form action={action} className="card transaction-form">
+      {initialItem && <><input name="version" type="hidden" value={initialItem.version} /><p className="muted-text">Changing financial details reverses {initialItem.number} and posts a linked replacement today. The original statement history remains visible.</p></>}
       {isBankTransaction && <p className="muted-text">Owner deposits and withdrawals change owner equity. They do not transfer money between two company accounts.</p>}
       <fieldset className="transaction-types">
         <legend>Transaction Type</legend>
@@ -173,7 +181,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
                   : "Supplier"}{" "}
                 *
               </label>
-              <select className="select" id="partyId" name="partyId" required>
+              <select className="select" defaultValue={initialItem?.partyId ?? ""} id="partyId" key={`party-${type}`} name="partyId" required>
                 <option value="">Select party</option>
                 {partyOptions.map((party) => (
                   <option key={party.id} value={party.id}>
@@ -190,12 +198,14 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
               <label htmlFor="bankAccountId">Bank / Cash Account *</label>
               <select
                 className="select"
+                defaultValue={initialItem?.bankAccountId ?? ""}
                 id="bankAccountId"
+                key={`account-${type}-${paymentMethod}`}
                 name="bankAccountId"
                 required
               >
                 <option value="">Select account</option>
-                {accounts.filter((account) => isBankTransaction || !account.isCashAccount).map((account) => (
+                {accounts.filter((account) => isBankTransaction || (paymentMethod === "cash" ? account.isCashAccount : !account.isCashAccount)).map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
@@ -271,6 +281,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
               className="textarea"
               id="description"
               name="description"
+              defaultValue={initialItem?.description ?? ""}
               placeholder="Enter transaction description…"
               required
             />
@@ -280,14 +291,14 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
               <label htmlFor="transactionDate">Date *</label>
               <input
                 className="input"
-                defaultValue={today}
+                defaultValue={initialItem?.date ?? today}
                 id="transactionDate"
                 name="transactionDate"
                 type="date"
                 required
               />
             </div>
-            <div className="field">
+            {isBankTransaction ? <div className="field"><span className="field-help">The selected account determines whether this is cash or bank.</span></div> : <div className="field">
               <label htmlFor="paymentMethod">Payment Method</label>
               <select
                 className="select"
@@ -301,7 +312,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
                 <option value="cheque">Cheque</option>
                 {!isBankTransaction && !["customer_receipt", "supplier_payment"].includes(type) && <option value="credit">Credit / Ledger</option>}
               </select>
-            </div>
+            </div>}
           </div>
           <div className="field">
             <label htmlFor="reference">Reference</label>
@@ -309,6 +320,7 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
               className="input"
               id="reference"
               name="reference"
+              defaultValue={initialItem?.reference ?? ""}
               placeholder="PO, cheque, or delivery reference"
             />
           </div>
@@ -361,12 +373,12 @@ export function TransactionForm({ parties, products, accounts, today }: Props) {
         </div>
       )}
       <div className="form-actions">
-        <Link className="button button-secondary" href="/transactions">
+        <Link className="button button-secondary" href={initialItem ? `/transactions/${initialItem.id}` : "/transactions"}>
           Cancel
         </Link>
         <button className="button button-primary" disabled={pending} type="submit">
           <Save size={19} />
-          {pending ? "Posting…" : "Save Transaction"}
+          {pending ? "Saving…" : initialItem ? "Save Correction" : "Save Transaction"}
         </button>
       </div>
     </form>

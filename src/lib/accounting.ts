@@ -59,6 +59,32 @@ export function hasPrecision(value: number, places: number): boolean {
   return Number.isFinite(value) && Math.abs(scaled - Math.round(scaled)) < 0.000001;
 }
 
+export type StockPosition = { productId: string; warehouseId: string; quantity: number };
+export type StockChange = { productId: string; warehouseId: string; quantityDelta: number };
+
+// Corrections can reverse a consumed purchase when the replacement still covers the units used.
+export function projectCorrectedStock(
+  positions: StockPosition[],
+  originalMovements: StockChange[],
+  replacementMovements: StockChange[],
+): StockPosition[] {
+  const quantities = new Map<string, number>();
+  const key = (productId: string, warehouseId: string) => `${productId}:${warehouseId}`;
+  for (const item of positions) quantities.set(key(item.productId, item.warehouseId), Math.round(item.quantity * 1000));
+  for (const item of originalMovements) {
+    const id = key(item.productId, item.warehouseId);
+    quantities.set(id, (quantities.get(id) ?? 0) - Math.round(item.quantityDelta * 1000));
+  }
+  for (const item of replacementMovements) {
+    const id = key(item.productId, item.warehouseId);
+    quantities.set(id, (quantities.get(id) ?? 0) + Math.round(item.quantityDelta * 1000));
+  }
+  return [...quantities].map(([id, quantity]) => {
+    const [productId, warehouseId] = id.split(":");
+    return { productId, warehouseId, quantity: quantity / 1000 };
+  });
+}
+
 export function calculateBillTotals(
   items: Array<{ quantity: number; unitPrice: number }>,
   taxRate: number,

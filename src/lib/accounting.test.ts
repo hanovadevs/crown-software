@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateBillTotals, hasPrecision, partyLedgerDelta, partyLedgerEvents, productTotal } from "./accounting";
+import { calculateBillTotals, hasPrecision, partyLedgerDelta, partyLedgerEvents, productTotal, projectCorrectedStock } from "./accounting";
 
 describe("party ledger posting", () => {
   it("counts only credit sales and purchases as debt", () => {
@@ -23,6 +23,17 @@ describe("party ledger posting", () => {
     expect(events.map((event) => [event.date, event.delta])).toEqual([
       ["2026-01-01", 100], ["2026-02-01", -100],
     ]);
+  });
+
+  it("applies a corrected amount on the correction date without changing an earlier closing balance", () => {
+    const events = partyLedgerEvents([
+      { id: "old", number: "TXN-1", date: "2026-09-01", description: "Original sale",
+        type: "sale", paymentMethod: "credit", status: "reversed", amount: "100.00" },
+      { id: "new", number: "TXN-2", date: "2026-10-03", description: "Corrected sale",
+        type: "sale", paymentMethod: "credit", status: "posted", amount: "125.00" },
+    ], new Map([["old", { entry_date: "2026-10-03", entry_number: "JRN-2" }]]));
+    expect(events.filter((event) => event.date <= "2026-09-30").reduce((balance, event) => balance + event.delta, 0)).toBe(100);
+    expect(events.reduce((balance, event) => balance + event.delta, 0)).toBe(125);
   });
 
   it("shows a settled sale and matching payment without changing the balance", () => {
@@ -69,5 +80,23 @@ describe("product transaction amount", () => {
     expect(productTotal(3, 19.99)).toBe(59.97);
     expect(hasPrecision(1.005, 3)).toBe(true);
     expect(hasPrecision(1.0005, 3)).toBe(false);
+  });
+});
+
+describe("transaction correction stock", () => {
+  it("allows a smaller replacement purchase when the final stock remains positive", () => {
+    expect(projectCorrectedStock(
+      [{ productId: "p", warehouseId: "w", quantity: 10 }],
+      [{ productId: "p", warehouseId: "w", quantityDelta: 100 }],
+      [{ productId: "p", warehouseId: "w", quantityDelta: 95 }],
+    )).toEqual([{ productId: "p", warehouseId: "w", quantity: 5 }]);
+  });
+
+  it("detects stock shortages when correcting a sale to a larger quantity", () => {
+    expect(projectCorrectedStock(
+      [{ productId: "p", warehouseId: "w", quantity: 2 }],
+      [{ productId: "p", warehouseId: "w", quantityDelta: -3 }],
+      [{ productId: "p", warehouseId: "w", quantityDelta: -6 }],
+    )[0].quantity).toBe(-1);
   });
 });

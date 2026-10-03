@@ -44,10 +44,13 @@ export default async function TransactionDetailPage({
         </div>
         <div className="card-actions detail-actions">
           <WhatsAppLedgerButton phone={item.partyPhone} message={whatsappMessage} triggerPrint={false} />
-          {item.status === "posted" && <Link className="button button-secondary" href={`/transactions/${id}/edit`}><Pencil size={16} /> Edit</Link>}
-          {item.status === "posted" && <DeleteButton action={deleteTransactionAction.bind(null, id)} confirmMessage={`Reverse ${item.number}? A dated reversal will offset its stock and journal entries.`} label={`Reverse ${item.number}`} />}
+          {item.status === "posted" && item.type !== "adjustment" && !item.linkedBillNumber && <Link className="button button-secondary" href={`/transactions/${id}/edit`}><Pencil size={16} /> Edit</Link>}
+          {item.status === "posted" && item.type !== "adjustment" && !item.linkedBillNumber && <DeleteButton action={deleteTransactionAction.bind(null, id)} confirmMessage={`Reverse ${item.number}? A dated reversal will offset its stock and journal entries.`} label={`Reverse ${item.number}`} />}
         </div>
       </div>
+      {item.reversedTransactionId && <p className="muted-text">Corrected by <Link href={`/transactions/${item.reversedTransactionId}`}>the replacement transaction</Link>.</p>}
+      {item.correctedFromId && <p className="muted-text">Correction of <Link href={`/transactions/${item.correctedFromId}`}>the original transaction</Link>. Ledger adjustment was posted on the correction day.</p>}
+      {item.linkedBillNumber && <p className="muted-text">Invoice {item.linkedBillNumber} controls this sale. Correct it through the invoice workflow.</p>}
       <section className="card panel transaction-detail">
         <span className="table-icon green">
           <ArrowLeftRight size={20} />

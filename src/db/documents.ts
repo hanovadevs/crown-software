@@ -10,7 +10,7 @@ export async function nextDocumentNumber(
   prefix: string,
   documentDate = new Date(),
 ) {
-  const year = documentDate.getFullYear();
+  const year = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Karachi", year: "numeric" }).format(documentDate));
   const sequenceKey = `${key}:${year}`;
   const result = await executor.execute(sql`
     INSERT INTO document_sequences (key, last_number, updated_at)

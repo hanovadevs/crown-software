@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   inventoryMovements,
+  journalEntries,
   parties,
   products,
   transactions,
@@ -168,16 +169,17 @@ export async function buildReport(
         type: transactions.type,
         description: transactions.description,
         amount: transactions.totalAmount,
-        date: transactions.transactionDate,
+        date: sql<string>`COALESCE(${journalEntries.entryDate}, ${transactions.transactionDate})`,
         status: transactions.status,
         paymentMethod: transactions.paymentMethod,
       })
       .from(transactions)
+      .leftJoin(journalEntries, and(eq(journalEntries.sourceType, "transaction"), eq(journalEntries.sourceId, transactions.id)))
       .where(eq(transactions.partyId, filters.partyId))
-      .orderBy(asc(transactions.transactionDate), asc(transactions.createdAt));
+      .orderBy(asc(journalEntries.entryDate), asc(transactions.createdAt));
 
     const reversalResult = await db.execute(sql`
-      SELECT je.source_id, je.entry_date, je.entry_number
+      SELECT je.source_id, TO_CHAR(je.entry_date, 'YYYY-MM-DD') AS entry_date, je.entry_number
       FROM journal_entries je
       JOIN transactions t ON t.id = je.source_id
       WHERE je.source_type = 'transaction_reversal'
